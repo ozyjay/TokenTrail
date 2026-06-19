@@ -154,7 +154,14 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         if runtime.backend == "ollama" and runtime.available and runtime.model:
             try:
-                generated_text = state.ollama_adapter.generate(runtime.model, trace.prompt)
+                generated_text = state.ollama_adapter.generate(
+                    runtime.model,
+                    trace.prompt,
+                    timeout_seconds=state.config.ollama_timeout_seconds,
+                    max_tokens=state.config.ollama_num_predict,
+                    temperature=state.config.ollama_temperature,
+                    disable_thinking=state.config.ollama_disable_thinking,
+                )
             except AdapterError:
                 self._send_json(_scripted_fallback_payload(runtime_id, trace))
                 return
