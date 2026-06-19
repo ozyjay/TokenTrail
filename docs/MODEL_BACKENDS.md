@@ -25,7 +25,7 @@ qwen3:4b
 Why:
 
 - small enough for local Open Day use;
-- capable enough for short curated prompts;
+- capable enough for short curated or staff-edited prompts;
 - practical for demos where reliability matters more than benchmark performance;
 - can be swapped for a smaller fallback such as `qwen3:1.7b` if needed.
 

@@ -193,6 +193,66 @@ def test_generate_trace_returns_live_response() -> None:
     ]
 
 
+def test_generate_trace_uses_custom_prompt_for_available_ollama() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(
+        OllamaStatus(available=True, models=("qwen3:4b",)),
+        generated_text="A custom live answer.",
+    )
+    state = server.build_server_state(
+        make_config(backend="ollama"),
+        ollama_adapter=adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/generate-trace",
+            {
+                "runtime_id": "ollama:qwen3:4b",
+                "trace_id": "robot-university",
+                "prompt": "  Write a tiny poem about a campus robot.  ",
+            },
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload["mode"] == "live"
+    assert payload["generated_text"] == "A custom live answer."
+    assert adapter.generate_calls[0][1] == "Write a tiny poem about a campus robot."
+
+
+def test_generate_trace_ignores_custom_prompt_for_scripted_runtime() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)))
+    state = server.build_server_state(make_config(), ollama_adapter=adapter)
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/generate-trace",
+            {
+                "runtime_id": "scripted:prepared-traces",
+                "trace_id": "robot-university",
+                "prompt": "Use this only if the scripted path is broken.",
+            },
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload["mode"] == "scripted"
+    assert payload["trace"]["prompt"] == "Write a short story about a robot at university."
+    assert adapter.generate_calls == []
+
+
 def test_generation_failure_uses_scripted_fallback() -> None:
     server = import_server_module()
     adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)), generated_text="RAISE")

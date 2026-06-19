@@ -1,8 +1,8 @@
 # Ollama Adapter Implementation Plan
 
 **Project:** Token Trail  
-**Status:** Planning  
-**Last updated:** 2026-06-19
+**Status:** Implemented through live generation, warm-up, and editable local prompt slice  
+**Last updated:** 2026-06-20
 
 ---
 
@@ -21,7 +21,7 @@ Token Trail UI
   -> display-friendly trace
 ```
 
-The first implementation should support curated prompts only. Open free-text input can be a later staff/dev mode after reset, timeout, and content controls are in place.
+The first implementation supported curated prompts only. A later small slice added staff-editable prompt entry for available local Ollama runtimes after reset, timeout, and fallback controls were in place. Scripted mode and scripted fallback remain curated and static.
 
 ---
 
@@ -130,7 +130,7 @@ App starts cleanly whether Ollama is running, stopped, missing, or missing the s
 
 ## Phase 2 — Curated live generation
 
-Goal: selected Ollama model can generate a short continuation for a curated prompt.
+Goal: selected Ollama model can generate a short continuation from the selected prompt.
 
 Build endpoint:
 
@@ -143,13 +143,16 @@ Request shape:
 ```json
 {
   "runtime_id": "ollama:qwen3:4b",
-  "trace_id": "robot-university"
+  "trace_id": "robot-university",
+  "prompt": "Write a tiny story about a robot at university."
 }
 ```
 
 Required behaviour:
 
-- use curated prompt from trace library;
+- use the curated prompt from the trace library by default;
+- allow an optional edited prompt only for live Ollama generation;
+- ignore edited prompt text for scripted mode and scripted fallback;
 - keep generation short;
 - timeout cleanly;
 - return a display-friendly trace;

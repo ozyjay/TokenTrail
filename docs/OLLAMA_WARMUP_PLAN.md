@@ -327,7 +327,7 @@ Live model not warmed — prepared trace still available
 
 - Reset must stay usable.
 - Scripted mode must not be blocked.
-- Do not add open text input.
+- This phase did not add prompt editing; a later slice added editable live prompts for available Ollama runtimes only.
 - Do not store prompts or generated responses.
 - Avoid “AI thinking” wording.
 

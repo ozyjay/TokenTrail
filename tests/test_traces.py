@@ -9,6 +9,12 @@ def test_trace_library_has_open_day_prompt() -> None:
     assert len(trace.steps) >= 3
 
 
+def test_trace_library_has_multiple_scripted_fallbacks() -> None:
+    assert len(TRACE_LIBRARY) >= 3
+    assert get_trace("mars-greenhouse").title == "Mars greenhouse"
+    assert get_trace("library-dragon").title == "Library dragon"
+
+
 def test_trace_probabilities_are_display_ready() -> None:
     for trace in TRACE_LIBRARY:
         for step in trace.steps:

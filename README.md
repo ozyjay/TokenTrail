@@ -2,7 +2,7 @@
 
 **Token Trail** is an Open Day demo that shows how a language model generates text one token at a time.
 
-Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. The goal is to make language model generation visible, understandable, and honest without claiming to show hidden model reasoning.
+Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. When a local Ollama model is selected, staff can edit the live prompt before generation. Scripted fallback remains curated and static. The goal is to make language model generation visible, understandable, and honest without claiming to show hidden model reasoning.
 
 > Public tagline: **Watch a language model predict text one token at a time.**
 
@@ -10,7 +10,7 @@ Visitors choose a curated prompt, then watch the system break the prompt into to
 
 ## Current status
 
-Initial scripted visual MVP scaffold with optional Ollama live generation.
+Initial scripted visual MVP scaffold with optional editable Ollama live generation.
 
 The current app:
 
@@ -22,7 +22,8 @@ The current app:
 - exposes a health check at `http://127.0.0.1:3100/health`;
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
-- can optionally use a local Ollama model for short curated live generation;
+- can optionally use a local Ollama model for short live generation from an editable prompt;
+- keeps scripted fallback prompts curated and static;
 - includes tests for traces, config, docs, adapters, and project setup;
 - supports Windows PowerShell scripts and Linux/macOS shell scripts.
 
@@ -202,6 +203,7 @@ See:
 Visitors can:
 
 - choose a curated prompt;
+- edit the prompt when an available local Ollama runtime is selected;
 - watch token blocks appear step by step;
 - compare likely next-token options;
 - see the selected token added to the generated text;
@@ -221,12 +223,12 @@ The large display should make the process obvious from a few metres away.
 
 Suggested panels:
 
-1. **Prompt** — the visitor’s selected or typed prompt.
+1. **Prompt** — the selected curated prompt, or the editable live prompt when a local Ollama runtime is active.
 2. **Tokenised prompt** — the prompt split into visible token blocks.
 3. **Next-token prediction** — candidate tokens with probability-style bars.
 4. **Selected token** — the token chosen for this step.
 5. **Generated text** — the response growing token by token.
-6. **Controls** — prompt selection, start, reset, scripted/live mode later.
+6. **Controls** — prompt selection, live prompt editing when enabled, runtime selection, start, and reset.
 
 ---
 
@@ -254,9 +256,9 @@ Default rules:
 
 - do not collect names, emails, phone numbers, or identifiable visitor data;
 - do not store visitor prompts by default;
-- clear prompts on reset;
+- clear live prompt edits on reset;
 - keep logs technical and non-identifying;
-- prefer curated prompts over open free text.
+- keep scripted fallback prompts curated and static.
 
 If prompt logging is ever enabled, document why, where it is stored, how long it is retained, and what signage is required.
 
@@ -271,6 +273,7 @@ Fallback should support:
 - scripted token traces;
 - simulated candidate probabilities;
 - replayable curated examples;
+- at least three prepared traces;
 - clear label such as:
 
 ```text
@@ -359,7 +362,7 @@ Build:
 
 ## Repository status
 
-Current status: **scripted MVP with optional Ollama live generation, warm-up, and live-mode layout polish**
+Current status: **scripted MVP with optional editable Ollama live generation, warm-up, live-mode layout polish, and three prepared traces**
 
 Next concrete build step:
 

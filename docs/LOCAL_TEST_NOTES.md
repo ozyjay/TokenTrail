@@ -4,6 +4,23 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-20 — Editable live prompt and extra scripted traces
+
+**Status:** implemented locally
+
+**Context:** After live Ollama generation became usable, staff wanted to edit prompts for the small local models while keeping scripted fallback predictable.
+
+**Fix captured in repo:**
+
+- Available Ollama runtimes show an editable prompt box seeded from the selected curated trace.
+- Scripted mode and scripted fallback ignore edited prompt text and continue to use prepared trace prompts.
+- Reset restores the selected curated prompt so live edits are not retained.
+- Two additional prepared traces were added: `Mars greenhouse` and `Library dragon`.
+
+**Follow-up:** During browser rehearsal, confirm live prompt edits are useful on the display, reset clears them, and scripted mode still presents only curated prepared traces.
+
+---
+
 ## 2026-06-19 — Ollama warm-up rehearsal
 
 **Status:** warm-up and one live generation verified

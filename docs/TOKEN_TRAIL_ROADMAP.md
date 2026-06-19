@@ -14,7 +14,7 @@ Token Trail should explain language-model generation clearly, visibly, and hones
 
 ```text
 Primary teaching mode: scripted token trail
-Optional live mode: local Ollama generation
+Optional live mode: local Ollama generation with staff-editable prompt
 Mandatory fallback: prepared trace replay
 ```
 
@@ -30,7 +30,9 @@ Token Trail currently has:
 - runtime selector;
 - Ollama model discovery;
 - optional live local generation;
+- editable prompt entry for available local Ollama runtimes;
 - scripted fallback for failed live generation;
+- three prepared scripted traces;
 - environment-driven configuration;
 - launch and test scripts;
 - tests for config, server routes, adapters, traces, runtime selection, and setup.
@@ -50,7 +52,7 @@ Recent live-generation findings:
 |---|---|---|---|
 | 0 | Repository and local-service foundation | Done | Repeatable local app on fixed Open Day ports |
 | 1 | Scripted visual MVP | Mostly done | Public-facing token trail without live model dependency |
-| 2 | Curated Ollama live generation | Working, needs polish | Runtime-selected local model can generate text |
+| 2 | Ollama live generation | Working, needs polish | Runtime-selected local model can generate text from an editable prompt |
 | 3 | Warm-up and reliability | Done | Model is warmed before visitor interaction |
 | 4 | Live-mode UI polish | Basic pass done | Live output is readable and clearly labelled |
 | 5 | Educational visualisation improvements | Later | Better explanation without overclaiming real internals |
@@ -100,6 +102,7 @@ Mostly done.
 ### Delivered
 
 - Curated trace selector.
+- Three prepared scripted traces.
 - Prompt display.
 - Tokenised prompt display.
 - Candidate-token rows with simulated probability bars.
@@ -121,11 +124,11 @@ This phase is good enough when a visitor can understand the core idea in under 3
 
 ---
 
-## Phase 2 — Curated Ollama live generation
+## Phase 2 — Ollama live generation
 
 ### Goal
 
-Allow a selected local Ollama model to generate short text from a curated prompt.
+Allow a selected local Ollama model to generate short text from a prompt. The selected curated trace still provides the starting prompt, but available Ollama runtimes allow staff to edit it before generation.
 
 ### Status
 
@@ -138,6 +141,7 @@ Working, needs polish.
 - Runtime availability display.
 - `POST /api/generate-trace` route.
 - Runtime-selected live generation.
+- Staff-editable live prompt for available Ollama runtimes.
 - Configurable generation settings:
   - `TOKEN_TRAIL_OLLAMA_NUM_PREDICT`
   - `TOKEN_TRAIL_OLLAMA_TEMPERATURE`
@@ -151,6 +155,7 @@ Working, needs polish.
 - Tune token budget and temperature for short readable output.
 - Keep live output concise enough for the display.
 - Avoid showing or implying private reasoning.
+- Keep reset clearing live prompt edits back to the curated trace prompt.
 
 ### Go/no-go
 
@@ -264,7 +269,7 @@ Live local model mode: shows generated text from a local model.
 - Real top-k token probabilities.
 - Token-by-token live streaming visualisation.
 - vLLM backend.
-- Open-ended visitor prompts.
+- Unsupervised open-ended visitor prompts.
 - QR/phone control.
 - Multi-user mode.
 
@@ -295,7 +300,7 @@ Final rehearsal phase.
 - Staff script.
 - Go/no-go checklist.
 - No visitor data storage.
-- No open free text unless explicitly supervised and constrained.
+- No unsupervised open free text; live prompt editing is for the local SLM path and must remain resettable and non-persistent.
 
 ### Rehearsal checklist
 
@@ -343,7 +348,7 @@ Run live mode only if it works reliably during setup. Otherwise, run prepared tr
 
 Do not prioritise these until the core demo is stable:
 
-- open-ended visitor text input;
+- unsupervised open-ended visitor text input;
 - visitor prompt logging;
 - QR/phone control;
 - multi-user crowd mode;

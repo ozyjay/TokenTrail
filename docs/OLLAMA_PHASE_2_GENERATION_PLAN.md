@@ -1,21 +1,21 @@
-# Ollama Phase 2 — Curated Live Generation Plan
+# Ollama Phase 2 — Live Generation Plan
 
 **Project:** Token Trail  
-**Status:** Planning  
-**Last updated:** 2026-06-19
+**Status:** Implemented, with later editable-prompt slice  
+**Last updated:** 2026-06-20
 
 ---
 
 ## Goal
 
-Implement curated live generation through Ollama while preserving scripted traces as the guaranteed fallback.
+Implement live generation through Ollama while preserving scripted traces as the guaranteed fallback.
 
-The first live path should not add open free-text input. It should use existing curated trace prompts.
+The first live path used existing curated trace prompts. A later slice added staff-editable prompt entry only for available local Ollama runtimes. Scripted mode and scripted fallback still use fixed prepared prompts.
 
 ```text
 runtime_id + trace_id
   -> validate selected Ollama runtime
-  -> load curated prompt
+  -> load curated prompt, optionally overridden by live prompt text
   -> call Ollama generate
   -> map response to display trace
   -> fallback to scripted trace on failure
@@ -62,7 +62,7 @@ The next step is making Ollama generate real content.
 
 ### Excluded
 
-- Open-ended visitor prompts
+- Unsupervised open-ended visitor prompts
 - Chat history
 - Conversations
 - QR integration
@@ -113,9 +113,12 @@ POST /api/generate-trace
 ```json
 {
   "runtime_id": "ollama:qwen3:4b",
-  "trace_id": "robot-university"
+  "trace_id": "robot-university",
+  "prompt": "Write a tiny story about a robot at university."
 }
 ```
+
+`prompt` is optional. If omitted, blank, or used with scripted mode, the server uses the selected prepared trace prompt.
 
 ### Response
 
@@ -360,6 +363,7 @@ Phase 2 is complete when:
 
 - Runtime-selected Ollama model generates text
 - Curated prompts work
+- Available Ollama runtimes can use an edited live prompt
 - Failure automatically falls back to scripted mode
 - No UI crashes
 - Unit tests pass without Ollama installed

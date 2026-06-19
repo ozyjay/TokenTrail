@@ -4,6 +4,7 @@ const runtimeStatus = document.querySelector("#runtimeStatus");
 const playButton = document.querySelector("#playButton");
 const resetButton = document.querySelector("#resetButton");
 const promptText = document.querySelector("#promptText");
+const promptInput = document.querySelector("#promptInput");
 const promptTokens = document.querySelector("#promptTokens");
 const candidateList = document.querySelector("#candidateList");
 const generatedText = document.querySelector("#generatedText");
@@ -37,6 +38,7 @@ async function loadRuntimeOptions() {
 
   runtimeSelect.value = payload.selected_id;
   renderRuntimeStatus(payload.selected);
+  renderPrompt();
   warmupSelectedRuntime();
 }
 
@@ -141,8 +143,7 @@ async function loadSelectedTrace() {
   const response = await fetch(`/api/traces/${traceSelect.value}`);
   currentTrace = await response.json();
   resetDemo();
-  promptText.textContent = currentTrace.prompt;
-  renderTokens(promptTokens, currentTrace.prompt_tokens);
+  resetPromptToTrace();
 }
 
 function renderTokens(container, tokens) {
@@ -154,6 +155,41 @@ function renderTokens(container, tokens) {
       return span;
     }),
   );
+}
+
+function simpleTokenise(text) {
+  return text.replaceAll(".", " .").replaceAll(",", " ,").replaceAll(":", " :").split(/\s+/).filter(Boolean);
+}
+
+function canEditPrompt() {
+  return currentRuntime && currentRuntime.backend === "ollama" && currentRuntime.available;
+}
+
+function resetPromptToTrace() {
+  if (!currentTrace) {
+    return;
+  }
+
+  promptInput.value = currentTrace.prompt;
+  renderPrompt();
+}
+
+function renderPrompt() {
+  if (!currentTrace) {
+    return;
+  }
+
+  if (canEditPrompt()) {
+    promptText.hidden = true;
+    promptInput.hidden = false;
+    renderTokens(promptTokens, simpleTokenise(promptInput.value));
+    return;
+  }
+
+  promptInput.hidden = true;
+  promptText.hidden = false;
+  promptText.textContent = currentTrace.prompt;
+  renderTokens(promptTokens, currentTrace.prompt_tokens);
 }
 
 function renderCandidates(step) {
@@ -216,10 +252,15 @@ function runStep() {
 }
 
 async function generateTrace() {
+  const body = { runtime_id: currentRuntime.id, trace_id: traceSelect.value };
+  if (canEditPrompt()) {
+    body.prompt = promptInput.value.trim();
+  }
+
   const response = await fetch("/api/generate-trace", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runtime_id: currentRuntime.id, trace_id: traceSelect.value }),
+    body: JSON.stringify(body),
   });
   const payload = await response.json();
 
@@ -247,10 +288,9 @@ function showLiveGeneration(payload) {
 function loadFallbackTrace(payload) {
   if (payload.trace) {
     currentTrace = payload.trace;
-    promptText.textContent = currentTrace.prompt;
-    renderTokens(promptTokens, currentTrace.prompt_tokens);
   }
   resetDemo();
+  resetPromptToTrace();
   runNotice = "Live generation unavailable — showing prepared trace";
   explanation.textContent = runNotice;
   startPreparedTrail();
@@ -298,6 +338,7 @@ function resetDemo() {
   generatedTokens = [];
   stepIndex = 0;
   runNotice = "";
+  resetPromptToTrace();
   candidateList.replaceChildren();
   generatedText.classList.remove("generated-text--live", "generated-text--live-long", "generated-text--live-very-long");
   generatedText.textContent = "";
@@ -317,6 +358,11 @@ runtimeSelect.addEventListener("change", () => {
   selectRuntime().catch((error) => {
     explanation.textContent = `Could not switch runtime: ${error}`;
   });
+});
+promptInput.addEventListener("input", () => {
+  if (canEditPrompt()) {
+    renderTokens(promptTokens, simpleTokenise(promptInput.value));
+  }
 });
 playButton.addEventListener("click", startDemo);
 resetButton.addEventListener("click", resetDemo);

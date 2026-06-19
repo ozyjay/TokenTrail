@@ -195,6 +195,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(error)}, status=404)
             return
 
+        live_prompt = _live_prompt_from_payload(payload, trace.prompt)
         runtime = next(option for option in state.runtime_options if option.id == runtime_id)
         if runtime.backend == "scripted":
             self._send_json(
@@ -212,7 +213,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             try:
                 generated_text = state.ollama_adapter.generate(
                     runtime.model,
-                    trace.prompt,
+                    live_prompt,
                     timeout_seconds=state.config.ollama_timeout_seconds,
                     max_tokens=state.config.ollama_num_predict,
                     temperature=state.config.ollama_temperature,
@@ -277,6 +278,17 @@ def _scripted_fallback_payload(runtime_id: str, trace) -> dict:
         "message": "Live generation unavailable",
         "trace": trace.to_dict(),
     }
+
+
+def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str):
+        return fallback_prompt
+
+    prompt = prompt.strip()
+    if not prompt:
+        return fallback_prompt
+    return prompt[:500]
 
 
 def _warmup_fallback_payload(runtime_id: str) -> dict:

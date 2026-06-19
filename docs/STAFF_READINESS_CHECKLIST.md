@@ -33,10 +33,12 @@ Local model ready
 ```
 
 3. Confirm **Generate live trail** is disabled only while warming.
-4. Click **Generate live trail**.
-5. Confirm the generated text is readable in paragraph form.
-6. Confirm longer live text does not get cut off at the bottom of the generated panel.
-7. Confirm the candidate panel says:
+4. Confirm the prompt appears in an editable text box.
+5. Optionally make a short safe edit to the prompt.
+6. Click **Generate live trail**.
+7. Confirm the generated text is readable in paragraph form.
+8. Confirm longer live text does not get cut off at the bottom of the generated panel.
+9. Confirm the candidate panel says:
 
 ```text
 Live local model response
@@ -46,11 +48,12 @@ Prepared token probabilities are shown in scripted mode.
 ## Fallback And Reset Check
 
 1. Click **Reset**.
-2. Confirm the normal generated-text layout is restored.
-3. Switch to scripted mode.
-4. Confirm no warm-up status appears.
-5. Click **Start trail**.
-6. Confirm the large token-by-token teaching trace runs.
+2. Confirm the live prompt returns to the selected curated prompt.
+3. Confirm the normal generated-text layout is restored.
+4. Switch to scripted mode.
+5. Confirm no warm-up status appears and the prompt is no longer editable.
+6. Click **Start trail**.
+7. Confirm the large token-by-token teaching trace runs.
 
 ## Go/No-Go
 
