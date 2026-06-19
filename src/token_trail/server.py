@@ -10,6 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
+from token_trail.adapters.base import AdapterError
 from token_trail.adapters.ollama import OllamaAdapter, OllamaStatus
 from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, load_config
 from token_trail.config import RuntimeConfig
@@ -28,6 +29,7 @@ class ServerState:
     runtime_options: list[RuntimeOption]
     runtime_state: RuntimeState
     ollama_status: OllamaStatus
+    ollama_adapter: OllamaAdapter
 
 
 class TokenTrailServer(ThreadingHTTPServer):
@@ -50,6 +52,7 @@ def build_server_state(config: RuntimeConfig, ollama_adapter: OllamaAdapter | No
         runtime_options=runtime_options,
         runtime_state=runtime_state,
         ollama_status=ollama_status,
+        ollama_adapter=adapter,
     )
 
 
@@ -96,6 +99,10 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             self._select_runtime()
             return
 
+        if self.path == "/api/generate-trace":
+            self._generate_trace()
+            return
+
         self.send_error(404, "Route not found")
 
     def log_message(self, format: str, *args: object) -> None:
@@ -114,6 +121,59 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(state.runtime_state.to_dict(state.runtime_options))
+
+    def _generate_trace(self) -> None:
+        state = self._state
+        try:
+            payload = self._read_json_body()
+            runtime_id = str(payload["runtime_id"])
+            trace_id = str(payload["trace_id"])
+            select_runtime(runtime_id, state.runtime_options)
+        except (KeyError, ValueError, json.JSONDecodeError) as error:
+            self._send_json({"error": str(error)}, status=400)
+            return
+
+        try:
+            trace = get_trace(trace_id)
+        except KeyError as error:
+            self._send_json({"error": str(error)}, status=404)
+            return
+
+        runtime = next(option for option in state.runtime_options if option.id == runtime_id)
+        if runtime.backend == "scripted":
+            self._send_json(
+                {
+                    "mode": "scripted",
+                    "runtime_id": runtime_id,
+                    "fallback_used": False,
+                    "message": "Prepared Demo Mode",
+                    "trace": trace.to_dict(),
+                }
+            )
+            return
+
+        if runtime.backend == "ollama" and runtime.available and runtime.model:
+            try:
+                generated_text = state.ollama_adapter.generate(runtime.model, trace.prompt)
+            except AdapterError:
+                self._send_json(_scripted_fallback_payload(runtime_id, trace))
+                return
+
+            self._send_json(
+                {
+                    "mode": "live",
+                    "runtime_id": runtime_id,
+                    "fallback_used": False,
+                    "generated_text": generated_text,
+                }
+            )
+            return
+
+        self._send_json(_scripted_fallback_payload(runtime_id, trace))
+
+    def _read_json_body(self) -> dict:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        return json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
 
     @property
     def _state(self) -> ServerState:
@@ -143,6 +203,16 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+
+def _scripted_fallback_payload(runtime_id: str, trace) -> dict:
+    return {
+        "mode": "scripted-fallback",
+        "runtime_id": runtime_id,
+        "fallback_used": True,
+        "message": "Live generation unavailable",
+        "trace": trace.to_dict(),
+    }
 
 
 def run_server(

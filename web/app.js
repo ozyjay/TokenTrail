@@ -14,6 +14,7 @@ let currentRuntime = null;
 let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
+let runNotice = "";
 
 async function loadRuntimeOptions() {
   const response = await fetch("/api/runtime");
@@ -57,6 +58,7 @@ function renderRuntimeStatus(runtime) {
   const suffix = runtime.available ? "ready" : "unavailable";
   runtimeStatus.textContent = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}`;
   runtimeStatus.title = runtime.notes;
+  playButton.textContent = buttonLabelForRuntime();
 }
 
 async function loadTraceList() {
@@ -137,21 +139,75 @@ function runStep() {
   renderCandidates(step);
   generatedTokens.push(step.selected_token);
   generatedText.textContent = joinTokens(generatedTokens);
-  explanation.textContent = step.explanation;
+  explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
   stepIndex += 1;
 }
 
-function startDemo() {
+async function generateTrace() {
+  const response = await fetch("/api/generate-trace", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runtime_id: currentRuntime.id, trace_id: traceSelect.value }),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Generation failed");
+  }
+
+  return payload;
+}
+
+function showLiveGeneration(payload) {
+  clearInterval(timer);
+  timer = null;
+  generatedTokens = [];
+  stepIndex = currentTrace.steps.length;
+  candidateList.replaceChildren();
+  generatedText.textContent = payload.generated_text;
+  explanation.textContent = "Live Local Model Mode";
+  playButton.textContent = buttonLabelForRuntime();
+}
+
+function loadFallbackTrace(payload) {
+  if (payload.trace) {
+    currentTrace = payload.trace;
+    promptText.textContent = currentTrace.prompt;
+    renderTokens(promptTokens, currentTrace.prompt_tokens);
+  }
+  resetDemo();
+  runNotice = "Live generation unavailable — showing prepared trace";
+  explanation.textContent = runNotice;
+  startPreparedTrail();
+}
+
+async function startDemo() {
   if (timer) {
     return;
   }
 
   if (currentRuntime && currentRuntime.backend !== "scripted") {
-    explanation.textContent = currentRuntime.available
-      ? `${currentRuntime.label} is ready for live mode. Showing prepared traces until live generation is added.`
-      : `${currentRuntime.label} is unavailable. Showing prepared traces for now.`;
+    playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
+    try {
+      const payload = await generateTrace();
+      if (payload.mode === "live") {
+        showLiveGeneration(payload);
+      } else {
+        loadFallbackTrace(payload);
+      }
+    } catch (error) {
+      resetDemo();
+      runNotice = `Live generation unavailable — showing prepared trace (${error})`;
+      explanation.textContent = runNotice;
+      startPreparedTrail();
+    }
+    return;
   }
 
+  startPreparedTrail();
+}
+
+function startPreparedTrail() {
   if (stepIndex >= currentTrace.steps.length) {
     resetDemo();
   }
@@ -166,10 +222,18 @@ function resetDemo() {
   timer = null;
   generatedTokens = [];
   stepIndex = 0;
+  runNotice = "";
   candidateList.replaceChildren();
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
-  playButton.textContent = "Start trail";
+  playButton.textContent = buttonLabelForRuntime();
+}
+
+function buttonLabelForRuntime() {
+  if (!currentRuntime || currentRuntime.backend === "scripted") {
+    return "Start trail";
+  }
+  return currentRuntime.available ? "Generate live trail" : "Show prepared trail";
 }
 
 traceSelect.addEventListener("change", loadSelectedTrace);

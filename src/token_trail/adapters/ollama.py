@@ -57,6 +57,51 @@ class OllamaAdapter:
 
         return model_name in self.list_models()
 
+    def generate(
+        self,
+        model: str,
+        prompt: str,
+        *,
+        timeout_seconds: float = 20.0,
+        max_tokens: int = 80,
+    ) -> str:
+        """Generate a short non-streaming continuation from a local Ollama model."""
+
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "num_predict": max_tokens,
+                "temperature": 0.7,
+            },
+        }
+        request = Request(
+            urljoin(self.base_url, "api/generate"),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with self._opener(request, timeout=timeout_seconds) as response:
+                raw_body = response.read()
+        except TimeoutError as error:
+            raise AdapterError("Ollama generation timed out") from error
+        except (HTTPError, URLError, OSError) as error:
+            raise AdapterError(f"Ollama generation failed: {error}") from error
+
+        try:
+            response_payload = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterError("Ollama generation returned invalid JSON") from error
+
+        response_text = response_payload.get("response") if isinstance(response_payload, dict) else None
+        if not isinstance(response_text, str) or not response_text.strip():
+            raise AdapterError("Ollama generation returned an empty response")
+
+        return response_text.strip()
+
     def _fetch_models(self) -> tuple[str, ...]:
         request = Request(urljoin(self.base_url, "api/tags"), method="GET")
 
