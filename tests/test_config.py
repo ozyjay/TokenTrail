@@ -1,6 +1,17 @@
 from token_trail.config import load_config
 
 
+class FakeEnvFile:
+    def __init__(self, content: str) -> None:
+        self.content = content
+
+    def exists(self) -> bool:
+        return True
+
+    def read_text(self, encoding: str) -> str:
+        return self.content
+
+
 def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     for name in (
         "TOKEN_TRAIL_BACKEND",
@@ -37,7 +48,7 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.backend_port == 9123
 
 
-def test_config_reads_env_file(tmp_path, monkeypatch) -> None:
+def test_config_reads_env_file(monkeypatch) -> None:
     for name in (
         "TOKEN_TRAIL_BACKEND",
         "TOKEN_TRAIL_HOST",
@@ -47,8 +58,7 @@ def test_config_reads_env_file(tmp_path, monkeypatch) -> None:
     ):
         monkeypatch.delenv(name, raising=False)
 
-    env_file = tmp_path / ".env"
-    env_file.write_text(
+    env_file = FakeEnvFile(
         "\n".join(
             [
                 "# Local Token Trail settings",
@@ -58,8 +68,7 @@ def test_config_reads_env_file(tmp_path, monkeypatch) -> None:
                 "TOKEN_TRAIL_BACKEND_PORT=9123",
                 "TOKEN_TRAIL_OLLAMA_MODEL=qwen3:1.7b",
             ]
-        ),
-        encoding="utf-8",
+        )
     )
 
     config = load_config(env_file=env_file)
@@ -71,9 +80,8 @@ def test_config_reads_env_file(tmp_path, monkeypatch) -> None:
     assert config.ollama_model == "qwen3:1.7b"
 
 
-def test_process_environment_overrides_env_file(tmp_path, monkeypatch) -> None:
-    env_file = tmp_path / ".env"
-    env_file.write_text("TOKEN_TRAIL_PORT=8123\n", encoding="utf-8")
+def test_process_environment_overrides_env_file(monkeypatch) -> None:
+    env_file = FakeEnvFile("TOKEN_TRAIL_PORT=8123\n")
     monkeypatch.setenv("TOKEN_TRAIL_PORT", "9000")
 
     config = load_config(env_file=env_file)

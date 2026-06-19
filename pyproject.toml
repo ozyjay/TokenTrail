@@ -11,3 +11,6 @@ package-mode = false
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
