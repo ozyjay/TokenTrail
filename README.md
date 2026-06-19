@@ -15,12 +15,13 @@ Initial scripted visual MVP scaffold.
 The current app:
 
 - uses Poetry, matching the VoiceChanger project style;
-- pins Python to `3.12.13` via `.python-version`;
+- targets Python 3.12, with `.python-version` pinned to `3.12.13` for reproducible Framework Desktop setup;
 - runs as a local web demo at `http://127.0.0.1:8000`;
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
 - does not require a live model yet;
-- includes tests for traces and project setup.
+- includes tests for traces, config, docs, and project setup;
+- supports Windows PowerShell scripts and Linux/macOS shell scripts.
 
 This is intentionally model-free at first so the Open Day explanation and visual design can be proven before adding backend complexity.
 
@@ -55,17 +56,26 @@ This demo explains the basic loop behind LLM text generation:
 src/
   token_trail/
     __init__.py
+    config.py      # Environment-driven runtime config
     server.py      # Tiny local HTTP server for the scripted MVP
     traces.py      # Scripted token traces and display helpers
 web/
   index.html       # Big-screen UI shell
   app.js           # Token trail animation
   styles.css       # Public-display styling
+docs/
+  DEVELOPMENT_ENVIRONMENTS.md
+  MODEL_BACKENDS.md
 scripts/
   setup.ps1
   test.ps1
   run.ps1
+  setup.sh
+  test.sh
+  run.sh
 tests/
+  test_config.py
+  test_development_docs.py
   test_project_setup.py
   test_traces.py
 ```
@@ -74,21 +84,25 @@ tests/
 
 ## Requirements
 
-- Python 3.12.13 via pyenv
+- Python 3.12
 - Poetry
-- PowerShell
+- PowerShell on Windows, or Bash on Linux/macOS
 
-Use the pinned Python version:
+For the Framework Desktop and final rehearsal, use the pinned Python version:
 
-```powershell
+```bash
 pyenv install 3.12.13
 pyenv local 3.12.13
 python --version
 ```
 
+For personal machines, an existing compatible Python 3.12 install should be fine for development.
+
 ---
 
 ## Useful commands
+
+### Windows
 
 Install dependencies:
 
@@ -108,11 +122,61 @@ Run the demo:
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
 ```
 
+### Linux / macOS
+
+Install dependencies:
+
+```bash
+bash ./scripts/setup.sh
+```
+
+Run tests and compile checks:
+
+```bash
+bash ./scripts/test.sh
+```
+
+Run the demo:
+
+```bash
+bash ./scripts/run.sh
+```
+
 Then open:
 
 ```text
 http://127.0.0.1:8000
 ```
+
+---
+
+## Environment configuration
+
+The app works without a `.env` file in scripted mode.
+
+For machine-specific settings, copy:
+
+```bash
+cp .env.example .env
+```
+
+Key setting:
+
+```text
+TOKEN_TRAIL_BACKEND=scripted
+```
+
+Future backend values:
+
+```text
+TOKEN_TRAIL_BACKEND=ollama
+TOKEN_TRAIL_BACKEND=vllm
+```
+
+See:
+
+- `docs/DEVELOPMENT_ENVIRONMENTS.md`
+- `docs/MODEL_BACKENDS.md`
 
 ---
 
