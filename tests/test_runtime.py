@@ -1,4 +1,5 @@
 from token_trail.config import RuntimeConfig
+from token_trail.adapters.ollama import OllamaStatus
 from token_trail.runtime import build_runtime_options, default_runtime_id, select_runtime
 
 
@@ -18,7 +19,7 @@ def make_config(backend: str = "scripted") -> RuntimeConfig:
 
 
 def test_build_runtime_options_includes_scripted_and_configured_models() -> None:
-    options = build_runtime_options(make_config())
+    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=True, models=("qwen3:4b",)))
 
     assert [option.id for option in options] == [
         "scripted:prepared-traces",
@@ -26,6 +27,7 @@ def test_build_runtime_options_includes_scripted_and_configured_models() -> None
         "ollama:qwen3:1.7b",
         "vllm:Qwen/Qwen3-4B",
     ]
+    assert [option.available for option in options] == [True, True, False, False]
 
 
 def test_default_runtime_uses_configured_backend_and_model() -> None:
@@ -46,3 +48,19 @@ def test_select_runtime_validates_known_ids() -> None:
     options = build_runtime_options(make_config())
 
     assert select_runtime("ollama:qwen3:1.7b", options) == "ollama:qwen3:1.7b"
+
+
+def test_ollama_options_show_missing_model_when_ollama_is_reachable() -> None:
+    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=True, models=("qwen3:4b",)))
+    missing_option = next(option for option in options if option.id == "ollama:qwen3:1.7b")
+
+    assert not missing_option.available
+    assert missing_option.notes == "Configured, but not found in local Ollama."
+
+
+def test_ollama_options_show_unavailable_when_ollama_is_unreachable() -> None:
+    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=False, models=(), error="nope"))
+    ollama_option = next(option for option in options if option.id == "ollama:qwen3:4b")
+
+    assert not ollama_option.available
+    assert ollama_option.notes == "Configured local Ollama model, but Ollama is unavailable."

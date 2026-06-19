@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+from token_trail.adapters.ollama import OllamaStatus
 from token_trail.config import RuntimeConfig
 
 
@@ -42,11 +43,11 @@ class RuntimeState:
         }
 
 
-def build_runtime_options(config: RuntimeConfig) -> list[RuntimeOption]:
+def build_runtime_options(config: RuntimeConfig, ollama_status: OllamaStatus | None = None) -> list[RuntimeOption]:
     """Build selectable runtime options from config.
 
-    Ollama and vLLM options are listed from configuration. A later adapter can
-    replace or enrich this with live discovery from installed runtimes.
+    Ollama and vLLM options are listed from configuration. Ollama options are
+    enriched with local model discovery when an adapter status is provided.
     """
 
     options = [
@@ -60,15 +61,26 @@ def build_runtime_options(config: RuntimeConfig) -> list[RuntimeOption]:
         )
     ]
 
+    installed_ollama_models = set(ollama_status.models if ollama_status else ())
+    ollama_reachable = bool(ollama_status and ollama_status.available)
+
     for model in config.ollama_models:
+        available = model in installed_ollama_models
+        if available:
+            notes = "Installed local Ollama model."
+        elif ollama_reachable:
+            notes = "Configured, but not found in local Ollama."
+        else:
+            notes = "Configured local Ollama model, but Ollama is unavailable."
+
         options.append(
             RuntimeOption(
                 id=f"ollama:{model}",
                 label=f"Ollama · {model}",
                 backend="ollama",
                 model=model,
-                available=False,
-                notes="Configured local Ollama model. Availability is checked when the live adapter is added.",
+                available=available,
+                notes=notes,
             )
         )
 

@@ -26,7 +26,7 @@ async function loadRuntimeOptions() {
       item.value = option.id;
       item.textContent = option.label;
       if (!option.available && option.backend !== "scripted") {
-        item.textContent += " (adapter pending)";
+        item.textContent += " (unavailable)";
       }
       return item;
     }),
@@ -54,7 +54,7 @@ async function selectRuntime() {
 }
 
 function renderRuntimeStatus(runtime) {
-  const suffix = runtime.available ? "ready" : "configured";
+  const suffix = runtime.available ? "ready" : "unavailable";
   runtimeStatus.textContent = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}`;
   runtimeStatus.title = runtime.notes;
 }
@@ -146,8 +146,10 @@ function startDemo() {
     return;
   }
 
-  if (currentRuntime && currentRuntime.backend !== "scripted" && !currentRuntime.available) {
-    explanation.textContent = `${currentRuntime.label} is selectable, but live generation is not wired yet. Showing prepared traces for now.`;
+  if (currentRuntime && currentRuntime.backend !== "scripted") {
+    explanation.textContent = currentRuntime.available
+      ? `${currentRuntime.label} is ready for live mode. Showing prepared traces until live generation is added.`
+      : `${currentRuntime.label} is unavailable. Showing prepared traces for now.`;
   }
 
   if (stepIndex >= currentTrace.steps.length) {
