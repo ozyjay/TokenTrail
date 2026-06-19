@@ -18,6 +18,10 @@ def make_config(backend: str = "scripted") -> RuntimeConfig:
         ollama_base_url="http://127.0.0.1:11434",
         ollama_model="qwen3:4b",
         ollama_models=("qwen3:4b", "qwen3:1.7b"),
+        ollama_num_predict=256,
+        ollama_temperature=0.4,
+        ollama_timeout_seconds=20.0,
+        ollama_disable_thinking=True,
         vllm_base_url="http://127.0.0.1:8000/v1",
         vllm_model="Qwen/Qwen3-4B",
         vllm_models=("Qwen/Qwen3-4B",),
@@ -33,8 +37,8 @@ class FakeOllamaAdapter:
     def status(self) -> OllamaStatus:
         return self._status
 
-    def generate(self, model: str, prompt: str) -> str:
-        self.generate_calls.append((model, prompt))
+    def generate(self, model: str, prompt: str, **kwargs) -> str:
+        self.generate_calls.append((model, prompt, kwargs))
         if self.generated_text == "RAISE":
             raise AdapterError("boom")
         return self.generated_text
@@ -148,7 +152,18 @@ def test_generate_trace_returns_live_response() -> None:
         "fallback_used": False,
         "generated_text": "A robot joined orientation and waved.",
     }
-    assert adapter.generate_calls == [("qwen3:4b", "Write a short story about a robot at university.")]
+    assert adapter.generate_calls == [
+        (
+            "qwen3:4b",
+            "Write a short story about a robot at university.",
+            {
+                "timeout_seconds": 20.0,
+                "max_tokens": 256,
+                "temperature": 0.4,
+                "disable_thinking": True,
+            },
+        )
+    ]
 
 
 def test_generation_failure_uses_scripted_fallback() -> None:
