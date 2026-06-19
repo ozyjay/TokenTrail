@@ -1,0 +1,13 @@
+[project]
+name = "token-trail"
+version = "0.1.0"
+description = "Open Day demo showing LLM-style next-token prediction step by step"
+requires-python = ">=3.12,<3.13"
+authors = [{ name = "Jason Holdsworth" }]
+dependencies = []
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
