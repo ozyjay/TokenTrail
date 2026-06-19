@@ -15,6 +15,8 @@ let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
 let runNotice = "";
+let warmupRequestId = 0;
+let isWarmingRuntime = false;
 
 async function loadRuntimeOptions() {
   const response = await fetch("/api/runtime");
@@ -35,6 +37,7 @@ async function loadRuntimeOptions() {
 
   runtimeSelect.value = payload.selected_id;
   renderRuntimeStatus(payload.selected);
+  warmupSelectedRuntime();
 }
 
 async function selectRuntime() {
@@ -50,15 +53,72 @@ async function selectRuntime() {
   }
 
   currentRuntime = payload.selected;
-  renderRuntimeStatus(payload.selected);
   resetDemo();
+  warmupSelectedRuntime();
 }
 
 function renderRuntimeStatus(runtime) {
   const suffix = runtime.available ? "ready" : "unavailable";
   runtimeStatus.textContent = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}`;
   runtimeStatus.title = runtime.notes;
+  updatePlayButton();
+}
+
+function updatePlayButton() {
   playButton.textContent = buttonLabelForRuntime();
+  playButton.disabled = isWarmingRuntime;
+}
+
+function shouldWarmRuntime(runtime) {
+  return runtime && runtime.backend === "ollama" && runtime.available;
+}
+
+async function warmupSelectedRuntime() {
+  warmupRequestId += 1;
+  const requestId = warmupRequestId;
+  const runtime = currentRuntime;
+
+  if (!shouldWarmRuntime(runtime)) {
+    isWarmingRuntime = false;
+    if (runtime) {
+      renderRuntimeStatus(runtime);
+    }
+    return;
+  }
+
+  isWarmingRuntime = true;
+  runtimeStatus.textContent = "Warming local model...";
+  runtimeStatus.title = runtime.notes;
+  updatePlayButton();
+
+  try {
+    const response = await fetch("/api/runtime/warmup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runtime_id: runtime.id }),
+    });
+    const payload = await response.json();
+
+    if (!response.ok) {
+      throw new Error(payload.error || "Warm-up failed");
+    }
+    if (requestId !== warmupRequestId || !currentRuntime || currentRuntime.id !== runtime.id) {
+      return;
+    }
+
+    runtimeStatus.textContent =
+      payload.status === "ready" ? "Local model ready" : "Live model not warmed — prepared trace still available";
+  } catch (error) {
+    if (requestId !== warmupRequestId || !currentRuntime || currentRuntime.id !== runtime.id) {
+      return;
+    }
+    runtimeStatus.textContent = "Live model not warmed — prepared trace still available";
+  } finally {
+    if (requestId === warmupRequestId && currentRuntime && currentRuntime.id === runtime.id) {
+      isWarmingRuntime = false;
+      updatePlayButton();
+    }
+  }
 }
 
 async function loadTraceList() {
@@ -166,7 +226,7 @@ function showLiveGeneration(payload) {
   candidateList.replaceChildren();
   generatedText.textContent = payload.generated_text;
   explanation.textContent = "Live Local Model Mode";
-  playButton.textContent = buttonLabelForRuntime();
+  updatePlayButton();
 }
 
 function loadFallbackTrace(payload) {
@@ -226,7 +286,7 @@ function resetDemo() {
   candidateList.replaceChildren();
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
-  playButton.textContent = buttonLabelForRuntime();
+  updatePlayButton();
 }
 
 function buttonLabelForRuntime() {
