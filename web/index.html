@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Token Trail</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">Open Day AI Demo</p>
+      <h1>Token Trail</h1>
+      <p class="tagline">Watch a language model predict text one token at a time.</p>
+    </header>
+
+    <section class="controls" aria-label="Demo controls">
+      <label for="traceSelect">Curated prompt</label>
+      <select id="traceSelect"></select>
+      <button id="playButton" type="button">Start trail</button>
+      <button id="resetButton" type="button">Reset</button>
+    </section>
+
+    <section class="panel prompt-panel">
+      <h2>1. Prompt</h2>
+      <p id="promptText"></p>
+      <div id="promptTokens" class="token-row" aria-label="Prompt tokens"></div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <h2>2. Next-token prediction</h2>
+        <div id="candidateList" class="candidate-list"></div>
+      </article>
+
+      <article class="panel generated-panel">
+        <h2>3. Generated text</h2>
+        <p id="generatedText" class="generated-text"></p>
+        <p id="explanation" class="explanation">Choose a prompt and start the trail.</p>
+      </article>
+    </section>
+
+    <footer class="notice">
+      This demo shows an observable generation process. It does not show private model reasoning.
+    </footer>
+  </main>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
