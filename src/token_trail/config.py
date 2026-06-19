@@ -16,6 +16,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 DEFAULT_TOKEN_TRAIL_PORT = 3100
 DEFAULT_TOKEN_TRAIL_BACKEND_PORT = 8100
+DEFAULT_OLLAMA_MODEL = "qwen3:4b"
+DEFAULT_VLLM_MODEL = "Qwen/Qwen3-4B"
 
 
 @dataclass(frozen=True)
@@ -28,8 +30,10 @@ class RuntimeConfig:
     backend_port: int
     ollama_base_url: str
     ollama_model: str
+    ollama_models: tuple[str, ...]
     vllm_base_url: str
     vllm_model: str
+    vllm_models: tuple[str, ...]
 
 
 
@@ -43,16 +47,33 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
             return os.environ[name]
         return file_values.get(name, default)
 
+    ollama_model = get_setting("TOKEN_TRAIL_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
+    vllm_model = get_setting("TOKEN_TRAIL_VLLM_MODEL", DEFAULT_VLLM_MODEL)
+
     return RuntimeConfig(
         backend=get_setting("TOKEN_TRAIL_BACKEND", "scripted").strip().lower(),
         host=get_setting("TOKEN_TRAIL_HOST", "127.0.0.1"),
         port=int(get_setting("TOKEN_TRAIL_PORT", str(DEFAULT_TOKEN_TRAIL_PORT))),
         backend_port=int(get_setting("TOKEN_TRAIL_BACKEND_PORT", str(DEFAULT_TOKEN_TRAIL_BACKEND_PORT))),
         ollama_base_url=get_setting("TOKEN_TRAIL_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-        ollama_model=get_setting("TOKEN_TRAIL_OLLAMA_MODEL", "qwen3:4b"),
+        ollama_model=ollama_model,
+        ollama_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_OLLAMA_MODELS", ollama_model)),
         vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
-        vllm_model=get_setting("TOKEN_TRAIL_VLLM_MODEL", "Qwen/Qwen3-4B"),
+        vllm_model=vllm_model,
+        vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
     )
+
+
+
+def _parse_csv_setting(value: str) -> tuple[str, ...]:
+    """Parse a comma-separated environment setting into unique non-empty values."""
+
+    parsed: list[str] = []
+    for raw_item in value.split(","):
+        item = raw_item.strip()
+        if item and item not in parsed:
+            parsed.append(item)
+    return tuple(parsed)
 
 
 
