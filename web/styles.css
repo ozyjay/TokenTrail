@@ -230,11 +230,21 @@ button:disabled {
 .generated-text--live {
   min-height: 0;
   max-width: 68ch;
-  font-size: clamp(1.55rem, 2.2vw, 2.4rem);
-  line-height: 1.35;
+  font-size: clamp(1.35rem, 1.8vw, 2rem);
+  line-height: 1.32;
   font-weight: 750;
   white-space: pre-line;
   overflow-wrap: anywhere;
+}
+
+.generated-text--live-long {
+  font-size: clamp(1.15rem, 1.45vw, 1.55rem);
+  line-height: 1.28;
+}
+
+.generated-text--live-very-long {
+  font-size: clamp(1rem, 1.2vw, 1.25rem);
+  line-height: 1.24;
 }
 
 .explanation {

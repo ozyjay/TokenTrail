@@ -43,6 +43,24 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-20 — qwen3:4b reasoning preamble fix
+
+**Status:** fixed locally
+
+**Context:** During visual rehearsal, switching from `qwen3:1.7b` to `qwen3:4b` showed reasoning-style text in the live output panel.
+
+**Observed issue:** `qwen3:4b` ignored the no-thinking prompt initially and placed reasoning text in the visible Ollama `response`. With the configured short token budget, the public story appeared only after a later `</think>` marker.
+
+**Fix captured in repo:**
+
+- Live Ollama generation now strips text before a closing `</think>` marker.
+- Obvious reasoning preambles are rejected instead of shown to visitors.
+- If no-thinking generation returns only reasoning with a short budget, the adapter retries once with a larger token budget before falling back.
+
+**Follow-up:** Recheck `qwen3:4b` in the browser. It should show only the story text or fall back to scripted mode; it should not show reasoning-style text.
+
+---
+
 ## 2026-06-19 — Runtime model selection local fix
 
 **Status:** fixed locally and pushed

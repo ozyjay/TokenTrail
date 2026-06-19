@@ -135,6 +135,33 @@ def test_ollama_generate_returns_response_text() -> None:
     assert adapter.generate("qwen3:4b", "Prompt") == "A small robot waved."
 
 
+def test_ollama_generate_strips_closed_thinking_preamble() -> None:
+    def opener(request, timeout):
+        return FakeResponse(
+            b'{"response": "Hmm, the user wants a story. I need to plan it. </think>\\n\\nA robot joined class."}'
+        )
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    assert adapter.generate("qwen3:4b", "Prompt") == "A robot joined class."
+
+
+def test_ollama_generate_retries_reasoning_only_response_with_larger_budget() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        calls.append(payload["options"]["num_predict"])
+        if len(calls) == 1:
+            return FakeResponse(b'{"response": "Hmm, the user wants a short story. I need to keep it concise."}')
+        return FakeResponse(b'{"response": "Thinking through the request. </think>\\n\\nA robot helped students debug code."}')
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    assert adapter.generate("qwen3:4b", "Prompt", max_tokens=96) == "A robot helped students debug code."
+    assert calls == [96, 512]
+
+
 def test_ollama_generate_handles_timeout() -> None:
     def opener(request, timeout):
         raise TimeoutError

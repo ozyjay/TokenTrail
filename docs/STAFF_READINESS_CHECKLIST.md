@@ -35,7 +35,8 @@ Local model ready
 3. Confirm **Generate live trail** is disabled only while warming.
 4. Click **Generate live trail**.
 5. Confirm the generated text is readable in paragraph form.
-6. Confirm the candidate panel says:
+6. Confirm longer live text does not get cut off at the bottom of the generated panel.
+7. Confirm the candidate panel says:
 
 ```text
 Live local model response

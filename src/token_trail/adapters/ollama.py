@@ -69,6 +69,37 @@ class OllamaAdapter:
     ) -> str:
         """Generate a short non-streaming continuation from a local Ollama model."""
 
+        token_budgets = [max_tokens]
+        if disable_thinking and max_tokens < 512:
+            token_budgets.append(512)
+
+        response_payload: Any = None
+        for token_budget in token_budgets:
+            response_payload = self._generate_once(
+                model,
+                prompt,
+                timeout_seconds=timeout_seconds,
+                max_tokens=token_budget,
+                temperature=temperature,
+                disable_thinking=disable_thinking,
+            )
+            response_text = response_payload.get("response") if isinstance(response_payload, dict) else None
+            public_response = _public_response_text(response_text, disable_thinking=disable_thinking)
+            if public_response:
+                return public_response
+
+        raise AdapterError("Ollama generation returned an empty response")
+
+    def _generate_once(
+        self,
+        model: str,
+        prompt: str,
+        *,
+        timeout_seconds: float,
+        max_tokens: int,
+        temperature: float,
+        disable_thinking: bool,
+    ) -> Any:
         payload = {
             "model": model,
             "prompt": _format_prompt(prompt, disable_thinking=disable_thinking),
@@ -101,11 +132,7 @@ class OllamaAdapter:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise AdapterError("Ollama generation returned invalid JSON") from error
 
-        response_text = response_payload.get("response") if isinstance(response_payload, dict) else None
-        if not isinstance(response_text, str) or not response_text.strip():
-            raise AdapterError("Ollama generation returned an empty response")
-
-        return response_text.strip()
+        return response_payload
 
     def warmup(self, model: str, *, timeout_seconds: float = 45.0, keep_alive: str = "30m") -> None:
         """Warm up a local Ollama model with a tiny non-streaming generation."""
@@ -188,3 +215,43 @@ def _format_prompt(prompt: str, *, disable_thinking: bool) -> str:
         return base_prompt
 
     return f"/no_think\n\n{base_prompt}"
+
+
+def _public_response_text(response_text: Any, *, disable_thinking: bool) -> str | None:
+    """Return only public answer text, never model reasoning preambles."""
+
+    if not isinstance(response_text, str):
+        return None
+
+    text = response_text.strip()
+    if not text:
+        return None
+
+    if disable_thinking and "</think>" in text:
+        text = text.rsplit("</think>", 1)[-1].strip()
+
+    if not text:
+        return None
+
+    if disable_thinking and _looks_like_reasoning(text):
+        return None
+
+    return text
+
+
+def _looks_like_reasoning(text: str) -> bool:
+    lower_text = text.lower()
+    reasoning_markers = (
+        "hmm, the user",
+        "okay, the user",
+        "the user wants",
+        "the user's query",
+        "they specifically said",
+        "i need to",
+        "i should",
+        "i'll",
+        "let me",
+        "no_think",
+        "thinking process",
+    )
+    return any(marker in lower_text[:500] for marker in reasoning_markers)

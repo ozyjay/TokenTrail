@@ -237,6 +237,8 @@ function showLiveGeneration(payload) {
   stepIndex = currentTrace.steps.length;
   renderLiveOutputPlaceholder();
   generatedText.classList.add("generated-text--live");
+  generatedText.classList.toggle("generated-text--live-long", payload.generated_text.length > 360);
+  generatedText.classList.toggle("generated-text--live-very-long", payload.generated_text.length > 640);
   generatedText.textContent = payload.generated_text;
   explanation.textContent = "Live Local Model Mode: generated text from the selected local model.";
   updatePlayButton();
@@ -297,7 +299,7 @@ function resetDemo() {
   stepIndex = 0;
   runNotice = "";
   candidateList.replaceChildren();
-  generatedText.classList.remove("generated-text--live");
+  generatedText.classList.remove("generated-text--live", "generated-text--live-long", "generated-text--live-very-long");
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
   updatePlayButton();
