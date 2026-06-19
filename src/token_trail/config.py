@@ -18,6 +18,9 @@ DEFAULT_TOKEN_TRAIL_PORT = 3100
 DEFAULT_TOKEN_TRAIL_BACKEND_PORT = 8100
 DEFAULT_OLLAMA_MODEL = "qwen3:4b"
 DEFAULT_VLLM_MODEL = "Qwen/Qwen3-4B"
+DEFAULT_OLLAMA_NUM_PREDICT = 256
+DEFAULT_OLLAMA_TEMPERATURE = 0.4
+DEFAULT_OLLAMA_TIMEOUT_SECONDS = 20.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +37,10 @@ class RuntimeConfig:
     vllm_model: str
     ollama_models: tuple[str, ...] = ()
     vllm_models: tuple[str, ...] = ()
+    ollama_num_predict: int = DEFAULT_OLLAMA_NUM_PREDICT
+    ollama_temperature: float = DEFAULT_OLLAMA_TEMPERATURE
+    ollama_timeout_seconds: float = DEFAULT_OLLAMA_TIMEOUT_SECONDS
+    ollama_disable_thinking: bool = True
 
     def __post_init__(self) -> None:
         if not self.ollama_models:
@@ -64,6 +71,12 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         ollama_base_url=get_setting("TOKEN_TRAIL_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
         ollama_model=ollama_model,
         ollama_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_OLLAMA_MODELS", ollama_model)),
+        ollama_num_predict=int(get_setting("TOKEN_TRAIL_OLLAMA_NUM_PREDICT", str(DEFAULT_OLLAMA_NUM_PREDICT))),
+        ollama_temperature=float(get_setting("TOKEN_TRAIL_OLLAMA_TEMPERATURE", str(DEFAULT_OLLAMA_TEMPERATURE))),
+        ollama_timeout_seconds=float(
+            get_setting("TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_TIMEOUT_SECONDS))
+        ),
+        ollama_disable_thinking=_parse_bool_setting(get_setting("TOKEN_TRAIL_OLLAMA_DISABLE_THINKING", "true")),
         vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
         vllm_model=vllm_model,
         vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
@@ -80,6 +93,13 @@ def _parse_csv_setting(value: str) -> tuple[str, ...]:
         if item and item not in parsed:
             parsed.append(item)
     return tuple(parsed)
+
+
+
+def _parse_bool_setting(value: str) -> bool:
+    """Parse a permissive boolean environment setting."""
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 
