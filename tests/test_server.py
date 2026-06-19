@@ -29,10 +29,17 @@ def make_config(backend: str = "scripted") -> RuntimeConfig:
 
 
 class FakeOllamaAdapter:
-    def __init__(self, status: OllamaStatus, generated_text: str = "A live robot story.") -> None:
+    def __init__(
+        self,
+        status: OllamaStatus,
+        generated_text: str = "A live robot story.",
+        warmup_error: bool = False,
+    ) -> None:
         self._status = status
         self.generated_text = generated_text
         self.generate_calls = []
+        self.warmup_error = warmup_error
+        self.warmup_calls = []
 
     def status(self) -> OllamaStatus:
         return self._status
@@ -42,6 +49,11 @@ class FakeOllamaAdapter:
         if self.generated_text == "RAISE":
             raise AdapterError("boom")
         return self.generated_text
+
+    def warmup(self, model: str, **kwargs) -> None:
+        self.warmup_calls.append((model, kwargs))
+        if self.warmup_error:
+            raise AdapterError("boom")
 
 
 def import_server_module():
@@ -228,6 +240,108 @@ def test_unknown_runtime_returns_400() -> None:
         payload = _post_json(
             f"http://127.0.0.1:{httpd.server_port}/api/generate-trace",
             {"runtime_id": "ollama:nope", "trace_id": "robot-university"},
+            expected_status=400,
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert "Unknown runtime option" in payload["error"]
+
+
+def test_runtime_warmup_returns_ready_for_available_ollama() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)))
+    state = server.build_server_state(make_config(backend="ollama"), ollama_adapter=adapter)
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/runtime/warmup",
+            {"runtime_id": "ollama:qwen3:4b"},
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload == {
+        "status": "ready",
+        "runtime_id": "ollama:qwen3:4b",
+        "message": "Local model warmed",
+    }
+    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 45.0, "keep_alive": "30m"})]
+
+
+def test_runtime_warmup_skips_scripted_runtime() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)))
+    state = server.build_server_state(make_config(), ollama_adapter=adapter)
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/runtime/warmup",
+            {"runtime_id": "scripted:prepared-traces"},
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload == {
+        "status": "skipped",
+        "runtime_id": "scripted:prepared-traces",
+        "message": "Scripted runtime does not need warm-up",
+    }
+    assert adapter.warmup_calls == []
+
+
+def test_runtime_warmup_returns_fallback_on_adapter_error() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)), warmup_error=True)
+    state = server.build_server_state(make_config(backend="ollama"), ollama_adapter=adapter)
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/runtime/warmup",
+            {"runtime_id": "ollama:qwen3:4b"},
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload == {
+        "status": "fallback",
+        "runtime_id": "ollama:qwen3:4b",
+        "message": "Could not warm local model; scripted fallback remains available",
+    }
+    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 45.0, "keep_alive": "30m"})]
+
+
+def test_runtime_warmup_returns_400_for_unknown_runtime() -> None:
+    server = import_server_module()
+    state = server.build_server_state(
+        make_config(),
+        ollama_adapter=FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",))),
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/runtime/warmup",
+            {"runtime_id": "ollama:nope"},
             expected_status=400,
         )
     finally:

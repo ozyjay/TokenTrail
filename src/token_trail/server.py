@@ -99,6 +99,10 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             self._select_runtime()
             return
 
+        if self.path == "/api/runtime/warmup":
+            self._warmup_runtime()
+            return
+
         if self.path == "/api/generate-trace":
             self._generate_trace()
             return
@@ -121,6 +125,44 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(state.runtime_state.to_dict(state.runtime_options))
+
+    def _warmup_runtime(self) -> None:
+        state = self._state
+        try:
+            payload = self._read_json_body()
+            runtime_id = select_runtime(str(payload["runtime_id"]), state.runtime_options)
+        except (KeyError, ValueError, json.JSONDecodeError) as error:
+            self._send_json({"error": str(error)}, status=400)
+            return
+
+        runtime = next(option for option in state.runtime_options if option.id == runtime_id)
+        if runtime.backend == "scripted":
+            self._send_json(
+                {
+                    "status": "skipped",
+                    "runtime_id": runtime_id,
+                    "message": "Scripted runtime does not need warm-up",
+                }
+            )
+            return
+
+        if runtime.backend == "ollama" and runtime.available and runtime.model:
+            try:
+                state.ollama_adapter.warmup(runtime.model, timeout_seconds=45.0, keep_alive="30m")
+            except AdapterError:
+                self._send_json(_warmup_fallback_payload(runtime_id))
+                return
+
+            self._send_json(
+                {
+                    "status": "ready",
+                    "runtime_id": runtime_id,
+                    "message": "Local model warmed",
+                }
+            )
+            return
+
+        self._send_json(_warmup_fallback_payload(runtime_id))
 
     def _generate_trace(self) -> None:
         state = self._state
@@ -219,6 +261,14 @@ def _scripted_fallback_payload(runtime_id: str, trace) -> dict:
         "fallback_used": True,
         "message": "Live generation unavailable",
         "trace": trace.to_dict(),
+    }
+
+
+def _warmup_fallback_payload(runtime_id: str) -> dict:
+    return {
+        "status": "fallback",
+        "runtime_id": runtime_id,
+        "message": "Could not warm local model; scripted fallback remains available",
     }
 
 

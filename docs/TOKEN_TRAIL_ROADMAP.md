@@ -353,15 +353,12 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Implement backend-only OllamaAdapter.warmup() and tests.
+Add UI warm-up state.
 ```
 
 ### Then
 
 ```text
-Add warm-up config.
-Add warm-up endpoint.
-Add UI warm-up state.
 Polish live output layout.
 ```
 
