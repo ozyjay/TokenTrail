@@ -2,7 +2,7 @@
 
 **Token Trail** is an Open Day demo that shows how a language model generates text one token at a time.
 
-Visitors choose or enter a prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. The goal is to make language model generation visible, understandable, and honest without claiming to show hidden model reasoning.
+Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. The goal is to make language model generation visible, understandable, and honest without claiming to show hidden model reasoning.
 
 > Public tagline: **Watch a language model predict text one token at a time.**
 
@@ -16,7 +16,10 @@ The current app:
 
 - uses Poetry, matching the VoiceChanger project style;
 - targets Python 3.12, with `.python-version` pinned to `3.12.13` for reproducible Framework Desktop setup;
-- runs as a local web demo at `http://127.0.0.1:8000`;
+- runs as a local web demo at `http://127.0.0.1:3100`;
+- uses the Open Day fixed local service port map;
+- checks its launch port before starting;
+- exposes a health check at `http://127.0.0.1:3100/health`;
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
 - does not require a live model yet;
@@ -57,6 +60,7 @@ src/
   token_trail/
     __init__.py
     config.py      # Environment-driven runtime config
+    ports.py       # Launch-time port checks
     server.py      # Tiny local HTTP server for the scripted MVP
     traces.py      # Scripted token traces and display helpers
 web/
@@ -69,15 +73,13 @@ docs/
 scripts/
   setup.ps1
   test.ps1
+  check_ports.ps1
   run.ps1
   setup.sh
   test.sh
+  check_ports.sh
   run.sh
 tests/
-  test_config.py
-  test_development_docs.py
-  test_project_setup.py
-  test_traces.py
 ```
 
 ---
@@ -100,52 +102,46 @@ For personal machines, an existing compatible Python 3.12 install should be fine
 
 ---
 
+## Ports and local services
+
+Token Trail follows the Open Day fixed local service convention.
+
+| Service | Default URL | Notes |
+|---|---|---|
+| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process MVP |
+| Health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
+| Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later frontend/backend split |
+| Ollama | `http://127.0.0.1:11434` | External model runtime |
+| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | External model runtime; Token Trail itself must not use port 8000 |
+
+Do not change ports randomly for rehearsal or Open Day. If a required port is occupied, the launch scripts should fail clearly.
+
+---
+
 ## Useful commands
 
 ### Windows
 
-Install dependencies:
-
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
-```
-
-Run tests and compile checks:
-
-```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/test.ps1
-```
-
-Run the demo:
-
-```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check_ports.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
 ```
 
 ### Linux / macOS
 
-Install dependencies:
-
 ```bash
 bash ./scripts/setup.sh
-```
-
-Run tests and compile checks:
-
-```bash
 bash ./scripts/test.sh
-```
-
-Run the demo:
-
-```bash
+bash ./scripts/check_ports.sh
 bash ./scripts/run.sh
 ```
 
 Then open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:3100
 ```
 
 ---
@@ -160,14 +156,16 @@ For machine-specific settings, copy:
 cp .env.example .env
 ```
 
-Key setting:
+Key settings:
 
 ```text
 TOKEN_TRAIL_BACKEND=scripted
+TOKEN_TRAIL_HOST=127.0.0.1
+TOKEN_TRAIL_PORT=3100
+TOKEN_TRAIL_BACKEND_PORT=8100
 ```
 
-Values in `.env` are loaded automatically by the local server. Real environment
-variables take precedence over values in the file.
+Values in `.env` are loaded automatically by the local server. Real environment variables take precedence over values in the file.
 
 Future backend values:
 
@@ -234,67 +232,6 @@ Also avoid claiming that the demo shows private model reasoning. It shows an obs
 
 ---
 
-## MVP scope
-
-The first usable version should include:
-
-- a simple full-screen web UI;
-- curated prompt buttons or selector;
-- visible tokenisation;
-- step-by-step generation;
-- top-k candidate token display;
-- adjustable generation speed;
-- reset button;
-- scripted fallback mode;
-- clear “what this shows” explanation.
-
----
-
-## Stretch features
-
-Add only after the MVP is reliable:
-
-- live local model backend;
-- real tokenizer integration;
-- real top-k probabilities;
-- temperature control;
-- side-by-side temperature comparison;
-- “why outputs vary” mode;
-- context window visualisation;
-- staff control panel;
-- kiosk/full-screen launcher;
-- recorded replay mode;
-- exportable demo traces for fallback use.
-
----
-
-## Architecture
-
-Preferred future architecture:
-
-```text
-Prompt
-  -> Tokeniser
-  -> Model or scripted trace
-  -> Candidate token probabilities
-  -> Sampler
-  -> Token stream
-  -> Big-screen visualiser
-```
-
-Current fallback-first architecture:
-
-```text
-Curated prompt
-  -> Pre-recorded token trace
-  -> Simulated probabilities
-  -> Big-screen visualiser
-```
-
-The visualiser should not depend tightly on the live model backend. It should be able to replay scripted traces when the model is unavailable.
-
----
-
 ## Data and privacy
 
 Default rules:
@@ -339,7 +276,9 @@ Token Trail is Open Day ready only if:
 - the UI is readable on a TV from 2–3 metres away;
 - staff can explain the demo with a one-sentence script;
 - it can run for 60 minutes without manual debugging;
-- it starts from cold boot without developer intervention.
+- it starts from cold boot without developer intervention;
+- assigned ports match the Open Day port map;
+- launch scripts fail clearly if the configured port is occupied.
 
 ---
 
@@ -373,12 +312,6 @@ Build:
 - reset button;
 - replay mode.
 
-Success test:
-
-```text
-A non-technical visitor can explain “it predicts the next token repeatedly” after a 30-second demo.
-```
-
 ### Phase 2 — Local model integration
 
 Goal: connect the visualiser to a real local model where practical.
@@ -391,12 +324,6 @@ Build:
 - real or approximated top-k token display;
 - graceful timeout handling;
 - switch between live and scripted mode.
-
-Success test:
-
-```text
-The live model can generate from three curated prompts and recover cleanly from failure.
-```
 
 ### Phase 3 — Open Day hardening
 
@@ -412,12 +339,6 @@ Build:
 - demo machine checklist;
 - no-terminal reset path.
 
-Success test:
-
-```text
-A student ambassador can start, run, reset, and switch fallback modes without developer help.
-```
-
 ---
 
 ## Repository status
@@ -427,7 +348,7 @@ Current status: **initial scripted MVP scaffold**
 Next concrete build step:
 
 ```text
-Run the app locally, assess big-screen readability, then add two more curated traces.
+Run the app locally on port 3100, confirm big-screen readability, then add two more curated traces.
 ```
 
 ---
