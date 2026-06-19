@@ -8,6 +8,24 @@ Visitors choose or enter a prompt, then watch the system break the prompt into t
 
 ---
 
+## Current status
+
+Initial scripted visual MVP scaffold.
+
+The current app:
+
+- uses Poetry, matching the VoiceChanger project style;
+- pins Python to `3.12.13` via `.python-version`;
+- runs as a local web demo at `http://127.0.0.1:8000`;
+- serves a big-screen UI from `web/`;
+- uses scripted token traces from `src/token_trail/traces.py`;
+- does not require a live model yet;
+- includes tests for traces and project setup.
+
+This is intentionally model-free at first so the Open Day explanation and visual design can be proven before adding backend complexity.
+
+---
+
 ## Purpose
 
 Token Trail is designed for a public university Open Day booth.
@@ -31,16 +49,82 @@ This demo explains the basic loop behind LLM text generation:
 
 ---
 
+## Project layout
+
+```text
+src/
+  token_trail/
+    __init__.py
+    server.py      # Tiny local HTTP server for the scripted MVP
+    traces.py      # Scripted token traces and display helpers
+web/
+  index.html       # Big-screen UI shell
+  app.js           # Token trail animation
+  styles.css       # Public-display styling
+scripts/
+  setup.ps1
+  test.ps1
+  run.ps1
+tests/
+  test_project_setup.py
+  test_traces.py
+```
+
+---
+
+## Requirements
+
+- Python 3.12.13 via pyenv
+- Poetry
+- PowerShell
+
+Use the pinned Python version:
+
+```powershell
+pyenv install 3.12.13
+pyenv local 3.12.13
+python --version
+```
+
+---
+
+## Useful commands
+
+Install dependencies:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
+```
+
+Run tests and compile checks:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/test.ps1
+```
+
+Run the demo:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000
+```
+
+---
+
 ## What visitors do
 
 Visitors can:
 
 - choose a curated prompt;
-- optionally enter a short prompt if staff allow it;
-- adjust generation settings such as temperature;
 - watch token blocks appear step by step;
 - compare likely next-token options;
-- reset and try another example.
+- see the selected token added to the generated text;
+- reset and replay the trail.
 
 Example prompt:
 
@@ -56,23 +140,12 @@ The large display should make the process obvious from a few metres away.
 
 Suggested panels:
 
-1. **Prompt**
-   - the visitor’s selected or typed prompt.
-
-2. **Tokenised prompt**
-   - the prompt split into visible token blocks.
-
-3. **Next-token prediction**
-   - candidate tokens with probability-style bars.
-
-4. **Selected token**
-   - the token chosen for this step.
-
-5. **Generated text**
-   - the response growing token by token.
-
-6. **Controls**
-   - temperature, speed, reset, scripted/live mode.
+1. **Prompt** — the visitor’s selected or typed prompt.
+2. **Tokenised prompt** — the prompt split into visible token blocks.
+3. **Next-token prediction** — candidate tokens with probability-style bars.
+4. **Selected token** — the token chosen for this step.
+5. **Generated text** — the response growing token by token.
+6. **Controls** — prompt selection, start, reset, scripted/live mode later.
 
 ---
 
@@ -98,13 +171,12 @@ Also avoid claiming that the demo shows private model reasoning. It shows an obs
 
 The first usable version should include:
 
-- a simple full-screen web or desktop UI;
-- curated prompt buttons;
+- a simple full-screen web UI;
+- curated prompt buttons or selector;
 - visible tokenisation;
 - step-by-step generation;
 - top-k candidate token display;
 - adjustable generation speed;
-- temperature control if supported;
 - reset button;
 - scripted fallback mode;
 - clear “what this shows” explanation.
@@ -118,6 +190,7 @@ Add only after the MVP is reliable:
 - live local model backend;
 - real tokenizer integration;
 - real top-k probabilities;
+- temperature control;
 - side-by-side temperature comparison;
 - “why outputs vary” mode;
 - context window visualisation;
@@ -130,7 +203,7 @@ Add only after the MVP is reliable:
 
 ## Architecture
 
-Preferred architecture:
+Preferred future architecture:
 
 ```text
 Prompt
@@ -142,7 +215,7 @@ Prompt
   -> Big-screen visualiser
 ```
 
-Fallback architecture:
+Current fallback-first architecture:
 
 ```text
 Curated prompt
@@ -152,21 +225,6 @@ Curated prompt
 ```
 
 The visualiser should not depend tightly on the live model backend. It should be able to replay scripted traces when the model is unavailable.
-
----
-
-## Candidate stack
-
-The stack is not locked in yet.
-
-Possible implementation options:
-
-- local web app with FastAPI or Flask backend;
-- browser front-end with HTML, CSS, and JavaScript;
-- local model via Ollama, llama.cpp, or a small Python model wrapper;
-- scripted JSON traces for fallback mode.
-
-Keep dependencies minimal so the demo is easy to run on event machines.
 
 ---
 
@@ -181,41 +239,6 @@ Default rules:
 - prefer curated prompts over open free text.
 
 If prompt logging is ever enabled, document why, where it is stored, how long it is retained, and what signage is required.
-
----
-
-## Curated prompt examples
-
-Good Open Day prompts:
-
-```text
-Write a short story about a robot at university.
-```
-
-```text
-Explain programming variables using a pizza example.
-```
-
-```text
-Continue this sentence: At Open Day, the tiny campus robot discovered
-```
-
-```text
-Write a two-line poem about studying IT in Cairns.
-```
-
-```text
-Give three beginner tips for learning Python.
-```
-
-Avoid prompts that invite:
-
-- personal advice;
-- medical, legal, or financial guidance;
-- political persuasion;
-- private information;
-- identity-based jokes or stereotypes;
-- unsafe or inappropriate content.
 
 ---
 
@@ -332,12 +355,12 @@ A student ambassador can start, run, reset, and switch fallback modes without de
 
 ## Repository status
 
-Current status: **initial planning / README draft**
+Current status: **initial scripted MVP scaffold**
 
 Next concrete build step:
 
 ```text
-Create a scripted visual MVP with no live model dependency.
+Run the app locally, assess big-screen readability, then add two more curated traces.
 ```
 
 ---
