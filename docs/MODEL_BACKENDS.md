@@ -1,33 +1,67 @@
 # Model Backends
 
-Token Trail starts with scripted traces. Live model support should be added only after the visual MVP is understandable and reliable.
+**Status:** Updated for HF Transformers trace-server pivot  
+**Last updated:** 2026-06-20
+
+Token Trail starts with scripted traces. Live model support should remain optional and should be added only when it improves the public explanation without weakening fallback reliability.
 
 ---
 
 ## Backend priority
 
-| Priority | Backend | Use |
-|---|---|---|
-| 1 | Scripted traces | Guaranteed fallback and development mode |
-| 2 | Ollama | First live SLM path for Framework Desktop testing |
-| 3 | vLLM | Optional high-throughput/OpenAI-compatible path after rehearsal testing |
+| Priority | Backend | Use | Status |
+|---|---|---|---|
+| 1 | Scripted traces | Guaranteed fallback and primary teaching mode | Required |
+| 2 | Ollama | Simple local live text generation | Working path |
+| 3 | Custom Hugging Face Transformers trace server | Planned live token-trace path using generated token IDs and scores | Preferred next spike |
+| 4 | vLLM | Optional desktop/GPU experiment if HF trace server is too slow | Stretch/deferred |
 
 ---
 
-## Recommended first model
+## Current decision
 
-Start with:
+Use this architecture:
+
+```text
+Scripted fallback: always available
+Ollama: optional live text mode
+HF Transformers trace server: preferred planned live token-trace mode
+vLLM: stretch/deferred
+```
+
+Do not depend on the HF trace server or vLLM during the public event unless they pass rehearsal on the final machine.
+
+---
+
+## Recommended first live-text model
+
+For Ollama live text, start with:
+
+```text
+qwen3:1.7b
+```
+
+or:
 
 ```text
 qwen3:4b
 ```
 
-Why:
+Use whichever is more reliable on the final machine. Ollama is for short live text, not the preferred live token-trace path.
 
-- small enough for local Open Day use;
-- capable enough for short curated or staff-edited prompts;
-- practical for demos where reliability matters more than benchmark performance;
-- can be swapped for a smaller fallback such as `qwen3:1.7b` if needed.
+---
+
+## Recommended first trace-server models
+
+For the custom HF trace-server spike, start smaller than the Ollama live text path:
+
+```text
+Qwen/Qwen2.5-0.5B-Instruct
+Qwen/Qwen2.5-1.5B-Instruct
+Qwen/Qwen2.5-3B-Instruct
+```
+
+The goal is not maximum model quality. The goal is a short, reliable, replayable token trail.
 
 ---
 
@@ -37,63 +71,35 @@ Token Trail follows the Open Day fixed local service map.
 
 | Service | Port / URL | Notes |
 |---|---|---|
-| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process MVP |
+| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process app |
 | Token Trail health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
 | Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later frontend/backend split |
-| Shared model adapter | `http://127.0.0.1:8600` | Optional future adapter over Ollama/vLLM/llama.cpp |
-| Ollama | `http://127.0.0.1:11434` | External model runtime |
-| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | External model runtime; Token Trail itself must not use 8000 |
+| HF trace server / shared model adapter | `http://127.0.0.1:8600` | Preferred planned live trace adapter |
+| Ollama | `http://127.0.0.1:11434` | External model runtime for live text |
+| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | Stretch/deferred; Token Trail itself must not use 8000 |
 
 ---
 
-## Open Day serving rule
+## Why not vLLM first?
 
-Installing both Ollama and vLLM on the Framework Desktop is fine.
+vLLM is a strong serving system, especially for high-throughput and OpenAI-compatible APIs. But Token Trail needs one short, inspectable trace at a time. The main risks are public-demo reliability, clear explanation, and easy fallback, not throughput.
 
-Depending on both during the public event is not ideal.
+Use vLLM later only if:
 
-Recommended public setup:
-
-```text
-Scripted fallback: always available
-Live backend: one active backend only
-Default live backend: Ollama
-Experimental backend: vLLM
-```
+- the RTX desktop is the final demo machine;
+- the setup is stable under rehearsal;
+- the HF trace server is too slow;
+- vLLM gives a clear benefit for live token traces.
 
 ---
 
-## Why not vLLM-only at first?
+## Why HF Transformers for live traces?
 
-vLLM is a strong serving system, especially for OpenAI-compatible APIs and higher-throughput use. But for Token Trail's early MVP, the main risks are not throughput. The main risks are:
-
-- making token prediction understandable;
-- keeping the display readable;
-- recovering quickly during a public demo;
-- avoiding model-server complexity while several demos run at once.
-
-Use vLLM later if the full booth architecture benefits from one shared OpenAI-compatible local endpoint.
-
----
-
-## Future adapter shape
-
-Keep backend-specific details behind an adapter so the UI does not care where tokens come from.
-
-```text
-Token Trail UI
-  -> TokenTrail API
-  -> Backend adapter
-      -> scripted trace
-      -> Ollama
-      -> vLLM/OpenAI-compatible endpoint
-```
-
-Each adapter should return the same display-friendly structure:
+A custom HF trace server can directly return the display shape Token Trail needs:
 
 ```json
 {
-  "prompt_tokens": ["Write", "a", "story"],
+  "prompt_tokens": ["Write", " a", " story"],
   "steps": [
     {
       "selected_token": "A",
@@ -101,16 +107,24 @@ Each adapter should return the same display-friendly structure:
         {"token": "A", "probability": 0.42},
         {"token": "The", "probability": 0.27}
       ],
-      "explanation": "Common story openings are likely after this prompt."
+      "explanation": "Top returned alternatives from the local model for this token position."
     }
   ]
 }
 ```
 
-If the live backend cannot provide real top-k probabilities, the adapter should either:
+This is simpler for Token Trail than trying to force Ollama or vLLM into the exact teaching format.
 
-1. clearly label the display as approximated; or
-2. fall back to scripted traces.
+---
+
+## Fallback rule
+
+If a live backend cannot provide a reliable, clear display:
+
+1. fall back to scripted traces;
+2. label the mode honestly;
+3. keep reset instant;
+4. do not store visitor prompts or responses.
 
 ---
 
