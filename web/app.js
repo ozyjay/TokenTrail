@@ -183,6 +183,18 @@ function renderCandidates(step) {
   );
 }
 
+function renderLiveOutputPlaceholder() {
+  const title = document.createElement("p");
+  title.className = "live-output-title";
+  title.textContent = "Live local model response";
+
+  const detail = document.createElement("p");
+  detail.className = "live-output-detail";
+  detail.textContent = "Prepared token probabilities are shown in scripted mode.";
+
+  candidateList.replaceChildren(title, detail);
+}
+
 function joinTokens(tokens) {
   return tokens.join(" ").replaceAll(" .", ".").replaceAll(" ,", ",").replaceAll(" :", ":");
 }
@@ -223,9 +235,10 @@ function showLiveGeneration(payload) {
   timer = null;
   generatedTokens = [];
   stepIndex = currentTrace.steps.length;
-  candidateList.replaceChildren();
+  renderLiveOutputPlaceholder();
+  generatedText.classList.add("generated-text--live");
   generatedText.textContent = payload.generated_text;
-  explanation.textContent = "Live Local Model Mode";
+  explanation.textContent = "Live Local Model Mode: generated text from the selected local model.";
   updatePlayButton();
 }
 
@@ -284,6 +297,7 @@ function resetDemo() {
   stepIndex = 0;
   runNotice = "";
   candidateList.replaceChildren();
+  generatedText.classList.remove("generated-text--live");
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
   updatePlayButton();
