@@ -10,7 +10,7 @@ Visitors choose a curated prompt, then watch the system break the prompt into to
 
 ## Current status
 
-Initial scripted visual MVP scaffold.
+Initial scripted visual MVP scaffold with optional Ollama live generation.
 
 The current app:
 
@@ -22,11 +22,11 @@ The current app:
 - exposes a health check at `http://127.0.0.1:3100/health`;
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
-- does not require a live model yet;
-- includes tests for traces, config, docs, and project setup;
+- can optionally use a local Ollama model for short curated live generation;
+- includes tests for traces, config, docs, adapters, and project setup;
 - supports Windows PowerShell scripts and Linux/macOS shell scripts.
 
-This is intentionally model-free at first so the Open Day explanation and visual design can be proven before adding backend complexity.
+Scripted mode remains the guaranteed fallback for Open Day.
 
 ---
 
@@ -59,17 +59,19 @@ This demo explains the basic loop behind LLM text generation:
 src/
   token_trail/
     __init__.py
-    config.py      # Environment-driven runtime config
-    ports.py       # Launch-time port checks
-    server.py      # Tiny local HTTP server for the scripted MVP
-    traces.py      # Scripted token traces and display helpers
+    adapters/       # Local model backend adapters
+    config.py       # Environment-driven runtime config
+    ports.py        # Launch-time port checks
+    server.py       # Tiny local HTTP server
+    traces.py       # Scripted token traces and display helpers
 web/
-  index.html       # Big-screen UI shell
-  app.js           # Token trail animation
-  styles.css       # Public-display styling
+  index.html        # Big-screen UI shell
+  app.js            # Token trail animation
+  styles.css        # Public-display styling
 docs/
   DEVELOPMENT_ENVIRONMENTS.md
   MODEL_BACKENDS.md
+  OLLAMA_ADAPTER_PLAN.md
 scripts/
   setup.ps1
   test.ps1
@@ -89,6 +91,7 @@ tests/
 - Python 3.12
 - Poetry
 - PowerShell on Windows, or Bash on Linux/macOS
+- Optional: Ollama for local live generation
 
 For the Framework Desktop and final rehearsal, use the pinned Python version:
 
@@ -174,10 +177,22 @@ TOKEN_TRAIL_BACKEND=ollama
 TOKEN_TRAIL_BACKEND=vllm
 ```
 
+Ollama live generation settings:
+
+```text
+TOKEN_TRAIL_OLLAMA_NUM_PREDICT=256
+TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.4
+TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=20
+TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=true
+```
+
+These defaults are intended to avoid Qwen3 spending the full token budget on reasoning before producing visible response text.
+
 See:
 
 - `docs/DEVELOPMENT_ENVIRONMENTS.md`
 - `docs/MODEL_BACKENDS.md`
+- `docs/OLLAMA_ADAPTER_PLAN.md`
 
 ---
 
@@ -343,12 +358,12 @@ Build:
 
 ## Repository status
 
-Current status: **initial scripted MVP scaffold**
+Current status: **scripted MVP with optional Ollama live generation**
 
 Next concrete build step:
 
 ```text
-Run the app locally on port 3100, confirm big-screen readability, then add two more curated traces.
+Run qwen3:4b with /no_think generation settings, verify live response text appears, then tune latency and fallback labels.
 ```
 
 ---
