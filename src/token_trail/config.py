@@ -30,10 +30,16 @@ class RuntimeConfig:
     backend_port: int
     ollama_base_url: str
     ollama_model: str
-    ollama_models: tuple[str, ...]
     vllm_base_url: str
     vllm_model: str
-    vllm_models: tuple[str, ...]
+    ollama_models: tuple[str, ...] = ()
+    vllm_models: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.ollama_models:
+            object.__setattr__(self, "ollama_models", (self.ollama_model,))
+        if not self.vllm_models:
+            object.__setattr__(self, "vllm_models", (self.vllm_model,))
 
 
 

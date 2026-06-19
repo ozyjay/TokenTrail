@@ -116,11 +116,12 @@ def run_server(host: str = "127.0.0.1", port: int = DEFAULT_TOKEN_TRAIL_PORT) ->
 
 
 def main() -> None:
+    config = load_config()
     parser = argparse.ArgumentParser(description="Run the Token Trail scripted MVP server.")
     parser.add_argument("--host", default=None, help="Host/interface to bind")
     parser.add_argument("--port", default=None, type=int, help="Port to bind")
     args = parser.parse_args()
-    run_server(host=args.host or CONFIG.host, port=args.port or CONFIG.port)
+    run_server(host=args.host or config.host, port=args.port or config.port)
 
 
 if __name__ == "__main__":
