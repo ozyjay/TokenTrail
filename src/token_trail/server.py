@@ -147,8 +147,22 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             return
 
         if runtime.backend == "ollama" and runtime.available and runtime.model:
+            if not state.config.ollama_warmup_enabled:
+                self._send_json(
+                    {
+                        "status": "skipped",
+                        "runtime_id": runtime_id,
+                        "message": "Ollama warm-up disabled",
+                    }
+                )
+                return
+
             try:
-                state.ollama_adapter.warmup(runtime.model, timeout_seconds=45.0, keep_alive="30m")
+                state.ollama_adapter.warmup(
+                    runtime.model,
+                    timeout_seconds=state.config.ollama_warmup_timeout_seconds,
+                    keep_alive=state.config.ollama_keep_alive,
+                )
             except AdapterError:
                 self._send_json(_warmup_fallback_payload(runtime_id))
                 return

@@ -9,7 +9,13 @@ from token_trail.adapters.ollama import OllamaStatus
 from token_trail.config import RuntimeConfig
 
 
-def make_config(backend: str = "scripted") -> RuntimeConfig:
+def make_config(
+    backend: str = "scripted",
+    *,
+    ollama_warmup_enabled: bool = True,
+    ollama_warmup_timeout_seconds: float = 45.0,
+    ollama_keep_alive: str = "30m",
+) -> RuntimeConfig:
     return RuntimeConfig(
         backend=backend,
         host="127.0.0.1",
@@ -22,6 +28,9 @@ def make_config(backend: str = "scripted") -> RuntimeConfig:
         ollama_temperature=0.4,
         ollama_timeout_seconds=20.0,
         ollama_disable_thinking=True,
+        ollama_warmup_enabled=ollama_warmup_enabled,
+        ollama_warmup_timeout_seconds=ollama_warmup_timeout_seconds,
+        ollama_keep_alive=ollama_keep_alive,
         vllm_base_url="http://127.0.0.1:8000/v1",
         vllm_model="Qwen/Qwen3-4B",
         vllm_models=("Qwen/Qwen3-4B",),
@@ -253,7 +262,8 @@ def test_unknown_runtime_returns_400() -> None:
 def test_runtime_warmup_returns_ready_for_available_ollama() -> None:
     server = import_server_module()
     adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)))
-    state = server.build_server_state(make_config(backend="ollama"), ollama_adapter=adapter)
+    config = make_config(backend="ollama", ollama_warmup_timeout_seconds=33.5, ollama_keep_alive="12m")
+    state = server.build_server_state(config, ollama_adapter=adapter)
     httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -273,7 +283,7 @@ def test_runtime_warmup_returns_ready_for_available_ollama() -> None:
         "runtime_id": "ollama:qwen3:4b",
         "message": "Local model warmed",
     }
-    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 45.0, "keep_alive": "30m"})]
+    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 33.5, "keep_alive": "12m"})]
 
 
 def test_runtime_warmup_skips_scripted_runtime() -> None:
@@ -305,7 +315,8 @@ def test_runtime_warmup_skips_scripted_runtime() -> None:
 def test_runtime_warmup_returns_fallback_on_adapter_error() -> None:
     server = import_server_module()
     adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)), warmup_error=True)
-    state = server.build_server_state(make_config(backend="ollama"), ollama_adapter=adapter)
+    config = make_config(backend="ollama", ollama_warmup_timeout_seconds=21.0, ollama_keep_alive="8m")
+    state = server.build_server_state(config, ollama_adapter=adapter)
     httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -325,7 +336,36 @@ def test_runtime_warmup_returns_fallback_on_adapter_error() -> None:
         "runtime_id": "ollama:qwen3:4b",
         "message": "Could not warm local model; scripted fallback remains available",
     }
-    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 45.0, "keep_alive": "30m"})]
+    assert adapter.warmup_calls == [("qwen3:4b", {"timeout_seconds": 21.0, "keep_alive": "8m"})]
+
+
+def test_runtime_warmup_skips_when_disabled() -> None:
+    server = import_server_module()
+    adapter = FakeOllamaAdapter(OllamaStatus(available=True, models=("qwen3:4b",)))
+    state = server.build_server_state(
+        make_config(backend="ollama", ollama_warmup_enabled=False),
+        ollama_adapter=adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/runtime/warmup",
+            {"runtime_id": "ollama:qwen3:4b"},
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload == {
+        "status": "skipped",
+        "runtime_id": "ollama:qwen3:4b",
+        "message": "Ollama warm-up disabled",
+    }
+    assert adapter.warmup_calls == []
 
 
 def test_runtime_warmup_returns_400_for_unknown_runtime() -> None:
