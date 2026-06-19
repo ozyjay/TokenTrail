@@ -1,7 +1,7 @@
 # Ollama Warm-Up Plan
 
 **Project:** Token Trail  
-**Status:** Implementation complete; manual rehearsal found live-generation tuning follow-up  
+**Status:** Complete; endpoint rehearsal verified warm-up and one live generation  
 **Last updated:** 2026-06-19
 
 ---
@@ -405,4 +405,4 @@ The demo must still be useful if Ollama is unavailable, slow, or not warmed.
 
 ## Current rehearsal note
 
-Local warm-up against Ollama succeeded for the configured Qwen runtime, and the app safely fell back to the prepared trace when live generation returned an empty visible response. Treat warm-up as complete, but keep live mode behind setup verification until generation settings produce a short visible answer during rehearsal.
+Local warm-up against Ollama succeeded for the configured Qwen runtime. After adding Ollama's explicit `think: false` generation flag, the app also returned a visible live response without using fallback. Repeat the browser-based rehearsal on the demo display before Open Day operation.

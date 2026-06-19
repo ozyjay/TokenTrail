@@ -94,6 +94,7 @@ def test_ollama_generate_posts_expected_payload() -> None:
             "model": "qwen3:4b",
             "prompt": "/no_think\n\nWrite a short, direct answer.\nDo not show reasoning.\n\nPrompt:\nWrite a short story.",
             "stream": False,
+            "think": False,
             "options": {
                 "num_predict": 12,
                 "temperature": 0.4,
@@ -121,6 +122,7 @@ def test_ollama_generate_supports_custom_temperature_and_no_thinking_toggle() ->
     )
 
     assert seen["payload"]["prompt"] == "Write a short, direct answer.\nDo not show reasoning.\n\nPrompt:\nPrompt"
+    assert "think" not in seen["payload"]
     assert seen["payload"]["options"] == {"num_predict": 44, "temperature": 0.2}
 
 

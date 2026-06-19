@@ -78,6 +78,9 @@ class OllamaAdapter:
                 "temperature": temperature,
             },
         }
+        if disable_thinking:
+            payload["think"] = False
+
         request = Request(
             urljoin(self.base_url, "api/generate"),
             data=json.dumps(payload).encode("utf-8"),

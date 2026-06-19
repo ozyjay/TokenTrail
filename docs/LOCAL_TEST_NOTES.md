@@ -6,7 +6,7 @@ This file records local setup or test issues found while running Token Trail on 
 
 ## 2026-06-19 — Ollama warm-up rehearsal
 
-**Status:** warm-up verified; live generation tuning still needed
+**Status:** warm-up and one live generation verified
 
 **Context:** The warm-up flow was implemented across the adapter, server endpoint, configuration, and UI status. A local endpoint rehearsal was run against real Ollama.
 
@@ -17,11 +17,13 @@ This file records local setup or test issues found while running Token Trail on 
 - `.\scripts\test.ps1` passed.
 - A temporary Token Trail server reported `/health` as `ok`.
 - `POST /api/runtime/warmup` for `ollama:qwen3:1.7b` returned `status: ready` and `message: Local model warmed`.
-- `POST /api/generate-trace` fell back to the prepared trace because current Qwen generation settings returned an empty visible response.
+- Initial `POST /api/generate-trace` fell back because Qwen returned `response: ""` and put text in Ollama's `thinking` field.
+- Adding Ollama's explicit `think: false` generation flag fixed the empty visible response.
+- A follow-up `POST /api/generate-trace` returned `mode: live`, `fallback_used: false`, and visible generated text.
 
-**Why this matters:** Warm-up is working and fallback remains mandatory, but live mode should not be considered Open Day-ready until generation settings produce a short visible response during setup.
+**Why this matters:** Warm-up works, fallback remains mandatory, and the configured Qwen runtime can produce a visible live response during setup.
 
-**Follow-up:** Tune the live generation prompt/settings or preferred model separately from the warm-up phase. Keep scripted mode as the booth-safe default until one warm-up and one live generation both succeed during rehearsal.
+**Follow-up:** Repeat the browser-based rehearsal on the demo display to confirm the warm-up status, live paragraph layout, reset, and scripted mode are readable from 2-3 metres.
 
 ---
 
