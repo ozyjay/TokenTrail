@@ -187,3 +187,62 @@ def test_ollama_generate_handles_empty_response() -> None:
         assert "empty response" in str(error)
     else:
         raise AssertionError("Expected AdapterError")
+
+
+def test_ollama_warmup_posts_expected_payload() -> None:
+    seen = {}
+
+    def opener(request, timeout):
+        seen["url"] = request.full_url
+        seen["timeout"] = timeout
+        seen["payload"] = json.loads(request.data.decode("utf-8"))
+        seen["content_type"] = request.headers["Content-type"]
+        return FakeResponse(b'{"response": "ready"}')
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    adapter.warmup("qwen3:4b")
+
+    assert seen == {
+        "url": "http://127.0.0.1:11434/api/generate",
+        "timeout": 45.0,
+        "payload": {
+            "model": "qwen3:4b",
+            "prompt": "/no_think\n\nReply with: ready",
+            "stream": False,
+            "keep_alive": "30m",
+            "options": {
+                "num_predict": 2,
+                "temperature": 0,
+            },
+        },
+        "content_type": "application/json",
+    }
+
+
+def test_ollama_warmup_handles_timeout() -> None:
+    def opener(request, timeout):
+        raise TimeoutError
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    try:
+        adapter.warmup("qwen3:4b")
+    except AdapterError as error:
+        assert "timed out" in str(error)
+    else:
+        raise AssertionError("Expected AdapterError")
+
+
+def test_ollama_warmup_handles_invalid_json() -> None:
+    def opener(request, timeout):
+        return FakeResponse(b"not-json")
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    try:
+        adapter.warmup("qwen3:4b")
+    except AdapterError as error:
+        assert "invalid JSON" in str(error)
+    else:
+        raise AssertionError("Expected AdapterError")

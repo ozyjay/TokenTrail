@@ -104,6 +104,39 @@ class OllamaAdapter:
 
         return response_text.strip()
 
+    def warmup(self, model: str, *, timeout_seconds: float = 45.0, keep_alive: str = "30m") -> None:
+        """Warm up a local Ollama model with a tiny non-streaming generation."""
+
+        payload = {
+            "model": model,
+            "prompt": "/no_think\n\nReply with: ready",
+            "stream": False,
+            "keep_alive": keep_alive,
+            "options": {
+                "num_predict": 2,
+                "temperature": 0,
+            },
+        }
+        request = Request(
+            urljoin(self.base_url, "api/generate"),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with self._opener(request, timeout=timeout_seconds) as response:
+                raw_body = response.read()
+        except TimeoutError as error:
+            raise AdapterError("Ollama warmup timed out") from error
+        except (HTTPError, URLError, OSError) as error:
+            raise AdapterError(f"Ollama warmup failed: {error}") from error
+
+        try:
+            json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterError("Ollama warmup returned invalid JSON") from error
+
     def _fetch_models(self) -> tuple[str, ...]:
         request = Request(urljoin(self.base_url, "api/tags"), method="GET")
 
