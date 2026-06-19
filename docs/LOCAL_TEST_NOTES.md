@@ -35,6 +35,32 @@ TOKEN_TRAIL_VLLM_MODELS=Qwen/Qwen3-4B
 
 ---
 
+## 2026-06-19 — Pytest local temp and cache permissions fix
+
+**Status:** fixed locally
+
+**Context:** The PowerShell test script was run repeatedly on Windows while validating the setup and recent config changes.
+
+**Observed issues:**
+
+- Pytest could not write to the repo-local `.pytest_cache` directory and emitted a cache warning.
+- Redirecting pytest temp output to `.pytest-tmp` exposed another Windows permissions problem when pytest tried to remove that directory.
+- The config tests used `tmp_path`, which caused setup errors before the tests ran when pytest could not access the temp base directory.
+- The server tests had stale `RuntimeConfig` fixtures after `backend_port` was added.
+
+**Fix captured in repo:**
+
+- Pytest cache provider is disabled in `pyproject.toml` with `addopts = "-p no:cacheprovider"`.
+- Config tests no longer use `tmp_path`; they pass a small fake env-file object into `load_config`.
+- Server test fixtures now include `backend_port`.
+- The test script now completes cleanly with all 15 tests passing.
+
+**Why this matters:** Local Windows temp and cache directories can have stale ACL or cleanup problems. The test suite should avoid depending on machine-specific temp locations unless a test is explicitly about filesystem behavior.
+
+**Follow-up:** If future tests genuinely need temporary files, prefer a helper that creates files under a known writable project test-artifact directory and cleans them up carefully, or fix the machine ACLs before relying on pytest's default temp root.
+
+---
+
 ## Local testing rule
 
 When a local machine fix is needed:
