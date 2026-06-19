@@ -25,6 +25,9 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
         "TOKEN_TRAIL_OLLAMA_TEMPERATURE",
         "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS",
         "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING",
+        "TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED",
+        "TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_OLLAMA_KEEP_ALIVE",
         "TOKEN_TRAIL_VLLM_BASE_URL",
         "TOKEN_TRAIL_VLLM_MODEL",
         "TOKEN_TRAIL_VLLM_MODELS",
@@ -43,6 +46,9 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.ollama_temperature == 0.4
     assert config.ollama_timeout_seconds == 20.0
     assert config.ollama_disable_thinking is True
+    assert config.ollama_warmup_enabled is True
+    assert config.ollama_warmup_timeout_seconds == 45.0
+    assert config.ollama_keep_alive == "30m"
     assert config.vllm_base_url == "http://127.0.0.1:8000/v1"
     assert config.vllm_model == "Qwen/Qwen3-4B"
     assert config.vllm_models == ("Qwen/Qwen3-4B",)
@@ -57,6 +63,9 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_TEMPERATURE", "0.2")
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS", "12.5")
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_DISABLE_THINKING", "false")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED", "false")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS", "30.5")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", "10m")
 
     config = load_config(env_file=None)
 
@@ -68,6 +77,9 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.ollama_temperature == 0.2
     assert config.ollama_timeout_seconds == 12.5
     assert config.ollama_disable_thinking is False
+    assert config.ollama_warmup_enabled is False
+    assert config.ollama_warmup_timeout_seconds == 30.5
+    assert config.ollama_keep_alive == "10m"
 
 
 def test_config_reads_env_file(monkeypatch) -> None:
@@ -82,6 +94,9 @@ def test_config_reads_env_file(monkeypatch) -> None:
         "TOKEN_TRAIL_OLLAMA_TEMPERATURE",
         "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS",
         "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING",
+        "TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED",
+        "TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_OLLAMA_KEEP_ALIVE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -99,6 +114,9 @@ def test_config_reads_env_file(monkeypatch) -> None:
                 "TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.3",
                 "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=15",
                 "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=no",
+                "TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED=off",
+                "TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS=22.5",
+                "TOKEN_TRAIL_OLLAMA_KEEP_ALIVE=5m",
             ]
         )
     )
@@ -115,12 +133,17 @@ def test_config_reads_env_file(monkeypatch) -> None:
     assert config.ollama_temperature == 0.3
     assert config.ollama_timeout_seconds == 15.0
     assert config.ollama_disable_thinking is False
+    assert config.ollama_warmup_enabled is False
+    assert config.ollama_warmup_timeout_seconds == 22.5
+    assert config.ollama_keep_alive == "5m"
 
 
 def test_process_environment_overrides_env_file(monkeypatch) -> None:
-    env_file = FakeEnvFile("TOKEN_TRAIL_PORT=8123\n")
+    env_file = FakeEnvFile("TOKEN_TRAIL_PORT=8123\nTOKEN_TRAIL_OLLAMA_KEEP_ALIVE=5m\n")
     monkeypatch.setenv("TOKEN_TRAIL_PORT", "9000")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", "20m")
 
     config = load_config(env_file=env_file)
 
     assert config.port == 9000
+    assert config.ollama_keep_alive == "20m"

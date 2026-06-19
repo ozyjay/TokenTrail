@@ -21,6 +21,8 @@ DEFAULT_VLLM_MODEL = "Qwen/Qwen3-4B"
 DEFAULT_OLLAMA_NUM_PREDICT = 256
 DEFAULT_OLLAMA_TEMPERATURE = 0.4
 DEFAULT_OLLAMA_TIMEOUT_SECONDS = 20.0
+DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS = 45.0
+DEFAULT_OLLAMA_KEEP_ALIVE = "30m"
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,9 @@ class RuntimeConfig:
     ollama_temperature: float = DEFAULT_OLLAMA_TEMPERATURE
     ollama_timeout_seconds: float = DEFAULT_OLLAMA_TIMEOUT_SECONDS
     ollama_disable_thinking: bool = True
+    ollama_warmup_enabled: bool = True
+    ollama_warmup_timeout_seconds: float = DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS
+    ollama_keep_alive: str = DEFAULT_OLLAMA_KEEP_ALIVE
 
     def __post_init__(self) -> None:
         if not self.ollama_models:
@@ -77,6 +82,11 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
             get_setting("TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_TIMEOUT_SECONDS))
         ),
         ollama_disable_thinking=_parse_bool_setting(get_setting("TOKEN_TRAIL_OLLAMA_DISABLE_THINKING", "true")),
+        ollama_warmup_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED", "true")),
+        ollama_warmup_timeout_seconds=float(
+            get_setting("TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS))
+        ),
+        ollama_keep_alive=get_setting("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", DEFAULT_OLLAMA_KEEP_ALIVE),
         vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
         vllm_model=vllm_model,
         vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
