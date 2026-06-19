@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from token_trail.config import load_config
+from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, load_config
 from token_trail.traces import get_trace, list_traces
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -22,6 +22,10 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
     server_version = "TokenTrail/0.1"
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path == "/health":
+            self._send_json({"status": "ok", "service": "token-trail"})
+            return
+
         if self.path == "/api/traces":
             self._send_json({"traces": list_traces()})
             return
@@ -67,11 +71,12 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
+def run_server(host: str = "127.0.0.1", port: int = DEFAULT_TOKEN_TRAIL_PORT) -> None:
     """Start the local demo server."""
 
     httpd = ThreadingHTTPServer((host, port), TokenTrailHandler)
     print(f"Token Trail running at http://{host}:{port}")
+    print(f"Health check: http://{host}:{port}/health")
     print("Press Ctrl+C to stop.")
     httpd.serve_forever()
 
