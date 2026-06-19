@@ -1,4 +1,6 @@
 const traceSelect = document.querySelector("#traceSelect");
+const runtimeSelect = document.querySelector("#runtimeSelect");
+const runtimeStatus = document.querySelector("#runtimeStatus");
 const playButton = document.querySelector("#playButton");
 const resetButton = document.querySelector("#resetButton");
 const promptText = document.querySelector("#promptText");
@@ -8,9 +10,54 @@ const generatedText = document.querySelector("#generatedText");
 const explanation = document.querySelector("#explanation");
 
 let currentTrace = null;
+let currentRuntime = null;
 let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
+
+async function loadRuntimeOptions() {
+  const response = await fetch("/api/runtime");
+  const payload = await response.json();
+  currentRuntime = payload.selected;
+
+  runtimeSelect.replaceChildren(
+    ...payload.options.map((option) => {
+      const item = document.createElement("option");
+      item.value = option.id;
+      item.textContent = option.label;
+      if (!option.available && option.backend !== "scripted") {
+        item.textContent += " (adapter pending)";
+      }
+      return item;
+    }),
+  );
+
+  runtimeSelect.value = payload.selected_id;
+  renderRuntimeStatus(payload.selected);
+}
+
+async function selectRuntime() {
+  const response = await fetch("/api/runtime/select", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runtime_id: runtimeSelect.value }),
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Runtime selection failed");
+  }
+
+  currentRuntime = payload.selected;
+  renderRuntimeStatus(payload.selected);
+  resetDemo();
+}
+
+function renderRuntimeStatus(runtime) {
+  const suffix = runtime.available ? "ready" : "configured";
+  runtimeStatus.textContent = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}`;
+  runtimeStatus.title = runtime.notes;
+}
 
 async function loadTraceList() {
   const response = await fetch("/api/traces");
@@ -99,6 +146,10 @@ function startDemo() {
     return;
   }
 
+  if (currentRuntime && currentRuntime.backend !== "scripted" && !currentRuntime.available) {
+    explanation.textContent = `${currentRuntime.label} is selectable, but live generation is not wired yet. Showing prepared traces for now.`;
+  }
+
   if (stepIndex >= currentTrace.steps.length) {
     resetDemo();
   }
@@ -120,9 +171,14 @@ function resetDemo() {
 }
 
 traceSelect.addEventListener("change", loadSelectedTrace);
+runtimeSelect.addEventListener("change", () => {
+  selectRuntime().catch((error) => {
+    explanation.textContent = `Could not switch runtime: ${error}`;
+  });
+});
 playButton.addEventListener("click", startDemo);
 resetButton.addEventListener("click", resetDemo);
 
-loadTraceList().catch((error) => {
-  explanation.textContent = `Could not load scripted traces: ${error}`;
+Promise.all([loadRuntimeOptions(), loadTraceList()]).catch((error) => {
+  explanation.textContent = `Could not load demo data: ${error}`;
 });
