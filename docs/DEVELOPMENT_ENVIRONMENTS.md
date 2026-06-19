@@ -36,13 +36,20 @@ python --version
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/test.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check_ports.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:3100
+```
+
+Health check:
+
+```text
+http://127.0.0.1:3100/health
 ```
 
 ---
@@ -65,13 +72,20 @@ Then run:
 ```bash
 bash ./scripts/setup.sh
 bash ./scripts/test.sh
+bash ./scripts/check_ports.sh
 bash ./scripts/run.sh
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:3100
+```
+
+Health check:
+
+```text
+http://127.0.0.1:3100/health
 ```
 
 ---
@@ -84,16 +98,15 @@ Copy the example file when you need machine-specific settings:
 cp .env.example .env
 ```
 
-The current app defaults to scripted mode even without a `.env` file.
-When `.env` exists, the local server loads it automatically. Environment
-variables already set in the shell take precedence.
+The current app defaults to scripted mode even without a `.env` file. When `.env` exists, the local server loads it automatically. Environment variables already set in the shell take precedence.
 
 Important settings:
 
 ```text
 TOKEN_TRAIL_BACKEND=scripted
 TOKEN_TRAIL_HOST=127.0.0.1
-TOKEN_TRAIL_PORT=8000
+TOKEN_TRAIL_PORT=3100
+TOKEN_TRAIL_BACKEND_PORT=8100
 ```
 
 Future model-backed modes:
@@ -106,9 +119,24 @@ TOKEN_TRAIL_OLLAMA_MODEL=qwen3:4b
 
 ```text
 TOKEN_TRAIL_BACKEND=vllm
-TOKEN_TRAIL_VLLM_BASE_URL=http://127.0.0.1:8001/v1
+TOKEN_TRAIL_VLLM_BASE_URL=http://127.0.0.1:8000/v1
 TOKEN_TRAIL_VLLM_MODEL=Qwen/Qwen3-4B
 ```
+
+---
+
+## Local service ports
+
+Token Trail uses the Open Day fixed local service map.
+
+| Service | Port | Notes |
+|---|---:|---|
+| Token Trail scripted/kiosk app | 3100 | Current single-process MVP |
+| Token Trail backend/API | 8100 | Reserved for future split backend |
+| Ollama | 11434 | External Ollama runtime |
+| vLLM OpenAI-compatible server | 8000 | External vLLM runtime, if deliberately enabled |
+
+For rehearsal and Open Day, do not silently fall back to random ports. The launch scripts check the configured Token Trail port before starting.
 
 ---
 
@@ -122,14 +150,6 @@ Recommended approach:
 2. Use Ollama as the first live SLM backend for Token Trail.
 3. Keep vLLM as an experimental or shared-serving path until it is proven with the full booth load.
 4. During final rehearsal, run all planned demos together and watch memory, thermals, ports, and restart complexity.
-
-Suggested port convention:
-
-| Service | Port |
-|---|---:|
-| Token Trail app | 8000 |
-| Ollama | 11434 |
-| vLLM OpenAI-compatible server | 8001 |
 
 Do not run Ollama and vLLM with large models loaded at the same time unless the full booth test proves it is stable.
 
