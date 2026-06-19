@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
+from token_trail.config import load_config
 from token_trail.traces import get_trace, list_traces
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -76,11 +77,12 @@ def run_server(host: str = "127.0.0.1", port: int = 8000) -> None:
 
 
 def main() -> None:
+    config = load_config()
     parser = argparse.ArgumentParser(description="Run the Token Trail scripted MVP server.")
-    parser.add_argument("--host", default="127.0.0.1", help="Host/interface to bind")
-    parser.add_argument("--port", default=8000, type=int, help="Port to bind")
+    parser.add_argument("--host", default=None, help="Host/interface to bind")
+    parser.add_argument("--port", default=None, type=int, help="Port to bind")
     args = parser.parse_args()
-    run_server(host=args.host, port=args.port)
+    run_server(host=args.host or config.host, port=args.port or config.port)
 
 
 if __name__ == "__main__":

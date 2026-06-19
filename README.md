@@ -166,6 +166,9 @@ Key setting:
 TOKEN_TRAIL_BACKEND=scripted
 ```
 
+Values in `.env` are loaded automatically by the local server. Real environment
+variables take precedence over values in the file.
+
 Future backend values:
 
 ```text

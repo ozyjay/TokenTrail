@@ -85,6 +85,8 @@ cp .env.example .env
 ```
 
 The current app defaults to scripted mode even without a `.env` file.
+When `.env` exists, the local server loads it automatically. Environment
+variables already set in the shell take precedence.
 
 Important settings:
 
