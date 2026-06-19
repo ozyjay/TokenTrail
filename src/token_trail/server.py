@@ -10,10 +10,15 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, load_config
+from token_trail.runtime import RuntimeState, build_runtime_options, default_runtime_id, select_runtime
 from token_trail.traces import get_trace, list_traces
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
+
+CONFIG = load_config()
+RUNTIME_OPTIONS = build_runtime_options(CONFIG)
+RUNTIME_STATE = RuntimeState(selected_id=default_runtime_id(CONFIG, RUNTIME_OPTIONS))
 
 
 class TokenTrailHandler(BaseHTTPRequestHandler):
@@ -23,7 +28,17 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         if self.path == "/health":
-            self._send_json({"status": "ok", "service": "token-trail"})
+            self._send_json(
+                {
+                    "status": "ok",
+                    "service": "token-trail",
+                    "runtime": RUNTIME_STATE.selected_id,
+                }
+            )
+            return
+
+        if self.path == "/api/runtime":
+            self._send_json(RUNTIME_STATE.to_dict(RUNTIME_OPTIONS))
             return
 
         if self.path == "/api/traces":
@@ -40,10 +55,28 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         self._serve_static_file()
 
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path == "/api/runtime/select":
+            self._select_runtime()
+            return
+
+        self.send_error(404, "Route not found")
+
     def log_message(self, format: str, *args: object) -> None:
         """Keep console output compact for public-demo use."""
 
         print(f"{self.address_string()} - {format % args}")
+
+    def _select_runtime(self) -> None:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
+            RUNTIME_STATE.selected_id = select_runtime(str(payload["runtime_id"]), RUNTIME_OPTIONS)
+        except (KeyError, ValueError, json.JSONDecodeError) as error:
+            self._send_json({"error": str(error)}, status=400)
+            return
+
+        self._send_json(RUNTIME_STATE.to_dict(RUNTIME_OPTIONS))
 
     def _send_json(self, payload: dict, status: int = 200) -> None:
         body = json.dumps(payload, indent=2).encode("utf-8")
@@ -77,17 +110,17 @@ def run_server(host: str = "127.0.0.1", port: int = DEFAULT_TOKEN_TRAIL_PORT) ->
     httpd = ThreadingHTTPServer((host, port), TokenTrailHandler)
     print(f"Token Trail running at http://{host}:{port}")
     print(f"Health check: http://{host}:{port}/health")
+    print(f"Runtime selector: {RUNTIME_STATE.selected_id}")
     print("Press Ctrl+C to stop.")
     httpd.serve_forever()
 
 
 def main() -> None:
-    config = load_config()
     parser = argparse.ArgumentParser(description="Run the Token Trail scripted MVP server.")
     parser.add_argument("--host", default=None, help="Host/interface to bind")
     parser.add_argument("--port", default=None, type=int, help="Port to bind")
     args = parser.parse_args()
-    run_server(host=args.host or config.host, port=args.port or config.port)
+    run_server(host=args.host or CONFIG.host, port=args.port or CONFIG.port)
 
 
 if __name__ == "__main__":
