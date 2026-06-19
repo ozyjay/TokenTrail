@@ -31,6 +31,21 @@ Why:
 
 ---
 
+## Port conventions
+
+Token Trail follows the Open Day fixed local service map.
+
+| Service | Port / URL | Notes |
+|---|---|---|
+| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process MVP |
+| Token Trail health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
+| Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later frontend/backend split |
+| Shared model adapter | `http://127.0.0.1:8600` | Optional future adapter over Ollama/vLLM/llama.cpp |
+| Ollama | `http://127.0.0.1:11434` | External model runtime |
+| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | External model runtime; Token Trail itself must not use 8000 |
+
+---
+
 ## Open Day serving rule
 
 Installing both Ollama and vLLM on the Framework Desktop is fine.
@@ -104,8 +119,8 @@ If the live backend cannot provide real top-k probabilities, the adapter should 
 Before using a live backend publicly, run this together for at least one hour:
 
 - VoiceChanger;
-- Token Trail scripted mode;
-- Token Trail live backend;
+- Token Trail scripted mode on port 3100;
+- Token Trail live backend, if enabled;
 - any QR/local web server demo;
 - TV output;
 - browser in kiosk/full-screen mode.
