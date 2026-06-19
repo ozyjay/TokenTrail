@@ -86,6 +86,12 @@ button:hover {
   transform: translateY(-1px);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
