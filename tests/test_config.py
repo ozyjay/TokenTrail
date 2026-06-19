@@ -21,6 +21,10 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
         "TOKEN_TRAIL_OLLAMA_BASE_URL",
         "TOKEN_TRAIL_OLLAMA_MODEL",
         "TOKEN_TRAIL_OLLAMA_MODELS",
+        "TOKEN_TRAIL_OLLAMA_NUM_PREDICT",
+        "TOKEN_TRAIL_OLLAMA_TEMPERATURE",
+        "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING",
         "TOKEN_TRAIL_VLLM_BASE_URL",
         "TOKEN_TRAIL_VLLM_MODEL",
         "TOKEN_TRAIL_VLLM_MODELS",
@@ -35,6 +39,10 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.backend_port == 8100
     assert config.ollama_model == "qwen3:4b"
     assert config.ollama_models == ("qwen3:4b",)
+    assert config.ollama_num_predict == 256
+    assert config.ollama_temperature == 0.4
+    assert config.ollama_timeout_seconds == 20.0
+    assert config.ollama_disable_thinking is True
     assert config.vllm_base_url == "http://127.0.0.1:8000/v1"
     assert config.vllm_model == "Qwen/Qwen3-4B"
     assert config.vllm_models == ("Qwen/Qwen3-4B",)
@@ -45,6 +53,10 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_PORT", "8123")
     monkeypatch.setenv("TOKEN_TRAIL_BACKEND_PORT", "9123")
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_MODELS", "qwen3:4b, qwen3:1.7b, qwen3:4b")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_NUM_PREDICT", "128")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_TEMPERATURE", "0.2")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS", "12.5")
+    monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_DISABLE_THINKING", "false")
 
     config = load_config(env_file=None)
 
@@ -52,6 +64,10 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.port == 8123
     assert config.backend_port == 9123
     assert config.ollama_models == ("qwen3:4b", "qwen3:1.7b")
+    assert config.ollama_num_predict == 128
+    assert config.ollama_temperature == 0.2
+    assert config.ollama_timeout_seconds == 12.5
+    assert config.ollama_disable_thinking is False
 
 
 def test_config_reads_env_file(monkeypatch) -> None:
@@ -62,6 +78,10 @@ def test_config_reads_env_file(monkeypatch) -> None:
         "TOKEN_TRAIL_BACKEND_PORT",
         "TOKEN_TRAIL_OLLAMA_MODEL",
         "TOKEN_TRAIL_OLLAMA_MODELS",
+        "TOKEN_TRAIL_OLLAMA_NUM_PREDICT",
+        "TOKEN_TRAIL_OLLAMA_TEMPERATURE",
+        "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -75,6 +95,10 @@ def test_config_reads_env_file(monkeypatch) -> None:
                 "TOKEN_TRAIL_BACKEND_PORT=9123",
                 "TOKEN_TRAIL_OLLAMA_MODEL=qwen3:1.7b",
                 "TOKEN_TRAIL_OLLAMA_MODELS=qwen3:1.7b,qwen3:4b",
+                "TOKEN_TRAIL_OLLAMA_NUM_PREDICT=160",
+                "TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.3",
+                "TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=15",
+                "TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=no",
             ]
         )
     )
@@ -87,6 +111,10 @@ def test_config_reads_env_file(monkeypatch) -> None:
     assert config.backend_port == 9123
     assert config.ollama_model == "qwen3:1.7b"
     assert config.ollama_models == ("qwen3:1.7b", "qwen3:4b")
+    assert config.ollama_num_predict == 160
+    assert config.ollama_temperature == 0.3
+    assert config.ollama_timeout_seconds == 15.0
+    assert config.ollama_disable_thinking is False
 
 
 def test_process_environment_overrides_env_file(monkeypatch) -> None:
