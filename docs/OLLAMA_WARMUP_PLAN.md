@@ -112,9 +112,11 @@ Payload:
 
 ### Behaviour
 
-- Treat valid JSON as success.
-- Raise `AdapterError` on timeout, HTTP/URL/OS error, invalid JSON, or malformed response.
+- Treat any valid JSON response as warm-up success.
+- Raise `AdapterError` on timeout, HTTP/URL/OS error, or invalid JSON.
 - Do not require real Ollama in tests.
+
+Warm-up does not need a non-empty `response` field because the goal is to load and keep the model resident, not to collect useful generated text.
 
 ### Tests
 
