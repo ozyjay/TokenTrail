@@ -14,7 +14,8 @@ Token Trail should explain language-model generation clearly, visibly, and hones
 
 ```text
 Primary teaching mode: scripted token trail
-Optional live mode: local Ollama generation with staff-editable prompt
+Optional live mode: local Ollama generation
+Planned educational upgrade: SLM live trace mode
 Mandatory fallback: prepared trace replay
 ```
 
@@ -30,7 +31,8 @@ Token Trail currently has:
 - runtime selector;
 - Ollama model discovery;
 - optional live local generation;
-- editable prompt entry for available local Ollama runtimes;
+- warm-up path for available local Ollama runtimes;
+- live-mode paragraph layout;
 - scripted fallback for failed live generation;
 - three prepared scripted traces;
 - environment-driven configuration;
@@ -41,8 +43,9 @@ Recent live-generation findings:
 
 - live generation works with local Ollama;
 - Qwen-style reasoning can consume token budget unless thinking is disabled or constrained;
-- first run can be slow if the model is cold;
-- live output needs a better paragraph layout than the large token-trace headline style.
+- first run can be slow if the model is cold, so warm-up is useful;
+- live text mode is readable but less educational than a replayable token trail;
+- Ollama logprobs/top-logprobs support makes an SLM live trace worth planning, but it should be proven on the actual local model before implementation.
 
 ---
 
@@ -52,10 +55,10 @@ Recent live-generation findings:
 |---|---|---|---|
 | 0 | Repository and local-service foundation | Done | Repeatable local app on fixed Open Day ports |
 | 1 | Scripted visual MVP | Mostly done | Public-facing token trail without live model dependency |
-| 2 | Ollama live generation | Working, needs polish | Runtime-selected local model can generate text from an editable prompt |
+| 2 | Ollama live generation | Working, needs polish | Runtime-selected local model can generate text |
 | 3 | Warm-up and reliability | Done | Model is warmed before visitor interaction |
 | 4 | Live-mode UI polish | Basic pass done | Live output is readable and clearly labelled |
-| 5 | Educational visualisation improvements | Later | Better explanation without overclaiming real internals |
+| 5 | SLM live trace planning | Planned / spike next | Convert model logprobs/top alternatives into replayable token trails |
 | 6 | Open Day hardening | Final rehearsal phase | Staff-ready, resettable, reliable booth demo |
 
 ---
@@ -113,7 +116,7 @@ Mostly done.
 
 ### Remaining polish
 
-- Add at least one or two more strong curated traces.
+- Add at least one or two more strong curated traces if needed.
 - Improve text sizing for TV viewing.
 - Ensure the explanation panel reads clearly from 2–3 metres.
 - Confirm reset is instant and visually obvious.
@@ -128,7 +131,7 @@ This phase is good enough when a visitor can understand the core idea in under 3
 
 ### Goal
 
-Allow a selected local Ollama model to generate short text from a prompt. The selected curated trace still provides the starting prompt, but available Ollama runtimes allow staff to edit it before generation.
+Allow a selected local Ollama model to generate short text from a curated prompt.
 
 ### Status
 
@@ -141,7 +144,6 @@ Working, needs polish.
 - Runtime availability display.
 - `POST /api/generate-trace` route.
 - Runtime-selected live generation.
-- Staff-editable live prompt for available Ollama runtimes.
 - Configurable generation settings:
   - `TOKEN_TRAIL_OLLAMA_NUM_PREDICT`
   - `TOKEN_TRAIL_OLLAMA_TEMPERATURE`
@@ -155,7 +157,7 @@ Working, needs polish.
 - Tune token budget and temperature for short readable output.
 - Keep live output concise enough for the display.
 - Avoid showing or implying private reasoning.
-- Keep reset clearing live prompt edits back to the curated trace prompt.
+- If staff prompt editing is kept, ensure it is wired through intentionally, resettable, constrained, and non-persistent.
 
 ### Go/no-go
 
@@ -179,13 +181,13 @@ Done.
 docs/OLLAMA_WARMUP_PLAN.md
 ```
 
-### Build sequence
+### Delivered
 
-1. Add backend-only `OllamaAdapter.warmup()`.
-2. Add warm-up config.
-3. Add `POST /api/runtime/warmup`.
-4. Add UI warm-up state.
-5. Add staff readiness checklist.
+- Backend-only `OllamaAdapter.warmup()`.
+- Warm-up config.
+- `POST /api/runtime/warmup`.
+- UI warm-up state.
+- Staff-facing warm-up wording.
 
 ### Required public wording
 
@@ -221,19 +223,19 @@ Make live generation look intentional and readable, not like a broken or oversiz
 
 Basic pass done.
 
-### Build
+### Delivered
 
-- Use a different layout for live text than scripted token animation.
-- Treat live output as paragraph text, not a giant token headline.
-- Add clear live-mode label:
+- Different layout for live text than scripted token animation.
+- Live output treated as paragraph text.
+- Clear live-mode explanation.
+- Candidate-token panel replaced with an honest live-mode placeholder.
+- Scripted trace UI preserved for the teaching mode.
 
-```text
-Live Local Model Mode
-```
+### Remaining polish
 
-- Hide or deemphasise simulated probability bars during live-only response display.
-- Preserve scripted trace UI for the teaching mode.
-- Ensure long generated text wraps cleanly and does not overflow the panel.
+- Confirm generated text remains readable from 2–3 metres on the final TV.
+- Confirm long live output does not overflow awkwardly.
+- Confirm reset returns to the scripted/default layout every time.
 
 ### Go/no-go
 
@@ -241,41 +243,51 @@ A live response should be readable on the TV without scrolling or developer inte
 
 ---
 
-## Phase 5 — Educational visualisation improvements
+## Phase 5 — SLM live trace mode
 
 ### Goal
 
-Improve the teaching value while staying honest about what is real, simulated, or simplified.
+Improve the teaching value by turning a local SLM response into a replayable token trail using returned logprobs/top alternatives.
 
 ### Status
 
-Later.
+Planned / spike next.
 
-### Candidate improvements
-
-- More curated traces.
-- Better token explanation copy.
-- A simple “why this token?” panel for scripted mode.
-- Clear labels for simulated probabilities.
-- Optional side-by-side comparison:
+### Supporting doc
 
 ```text
-Prepared trace mode: shows candidate tokens and simulated probabilities.
-Live local model mode: shows generated text from a local model.
+docs/SLM_LIVE_TRACE_PLAN.md
 ```
 
-### Deferred unless clearly needed
+### Target behaviour
 
-- Real top-k token probabilities.
-- Token-by-token live streaming visualisation.
-- vLLM backend.
-- Unsupervised open-ended visitor prompts.
-- QR/phone control.
-- Multi-user mode.
+```text
+curated prompt
+  -> local Ollama generation with logprobs/top_logprobs
+  -> convert generated tokens and top returned alternatives into trace steps
+  -> replay using the existing token trail animation
+```
+
+### Why this matters
+
+Current live text mode proves that a local model can generate a response, but it does not show the token-by-token trail. SLM live trace mode would bring live generation closer to the scripted teaching experience while keeping fallback intact.
+
+### Constraints
+
+- Non-streaming first.
+- Do not claim to show private reasoning.
+- Do not claim top returned alternatives are every possible next token.
+- Do not require SLM live trace for Open Day.
+- Keep scripted fallback mandatory.
+- Feature-gate this until proven on the final machine.
+
+### First tiny step
+
+Run the API capability spike from `docs/SLM_LIVE_TRACE_PLAN.md` and confirm the selected local model returns usable `logprobs` and `top_logprobs`.
 
 ### Go/no-go
 
-Only add educational features that make the demo clearer from a booth distance and do not make it fragile.
+Proceed only if the actual installed Ollama version and selected local model return stable enough logprob data for a clear public replay. Otherwise, keep live text mode plus scripted traces.
 
 ---
 
@@ -300,7 +312,7 @@ Final rehearsal phase.
 - Staff script.
 - Go/no-go checklist.
 - No visitor data storage.
-- No unsupervised open free text; live prompt editing is for the local SLM path and must remain resettable and non-persistent.
+- No unsupervised open free text.
 
 ### Rehearsal checklist
 
@@ -338,6 +350,12 @@ Optional live-mode note:
 This mode uses a local model running on this computer. If live generation is unavailable, the demo switches to a prepared trace.
 ```
 
+Optional SLM live trace note:
+
+```text
+This mode builds a token trail from the top returned alternatives of a local model. It still does not show private model reasoning.
+```
+
 ### Go/no-go
 
 Run live mode only if it works reliably during setup. Otherwise, run prepared trace mode.
@@ -354,7 +372,7 @@ Do not prioritise these until the core demo is stable:
 - multi-user crowd mode;
 - real private reasoning display;
 - claims that the model understands like a person;
-- claims that probabilities are exact unless they really are;
+- claims that top returned alternatives are the full set of possible next tokens;
 - live mode as a required dependency.
 
 ---
@@ -364,13 +382,14 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Run browser/display rehearsal using docs/STAFF_READINESS_CHECKLIST.md.
+Run Phase A — API capability spike from docs/SLM_LIVE_TRACE_PLAN.md.
 ```
 
 ### Then
 
 ```text
-Continue Open Day hardening.
+If the spike succeeds, add adapter-only generate_with_logprobs() and tests.
+If the spike fails, keep SLM live trace disabled and continue Open Day hardening.
 ```
 
 ### Always preserve
@@ -378,4 +397,5 @@ Continue Open Day hardening.
 ```text
 Scripted fallback remains mandatory.
 Live generation remains optional.
+SLM live trace remains optional until proven reliable.
 ```
