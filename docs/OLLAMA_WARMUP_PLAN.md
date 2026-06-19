@@ -1,7 +1,7 @@
 # Ollama Warm-Up Plan
 
 **Project:** Token Trail  
-**Status:** Planning  
+**Status:** Implementation complete; manual rehearsal found live-generation tuning follow-up  
 **Last updated:** 2026-06-19
 
 ---
@@ -402,3 +402,7 @@ Fallback mode is required.
 ```
 
 The demo must still be useful if Ollama is unavailable, slow, or not warmed.
+
+## Current rehearsal note
+
+Local warm-up against Ollama succeeded for the configured Qwen runtime, and the app safely fell back to the prepared trace when live generation returned an empty visible response. Treat warm-up as complete, but keep live mode behind setup verification until generation settings produce a short visible answer during rehearsal.

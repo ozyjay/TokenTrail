@@ -358,12 +358,12 @@ Build:
 
 ## Repository status
 
-Current status: **scripted MVP with optional Ollama live generation**
+Current status: **scripted MVP with optional Ollama live generation, warm-up, and live-mode layout polish**
 
 Next concrete build step:
 
 ```text
-Run qwen3:4b with /no_think generation settings, verify live response text appears, then tune latency and fallback labels.
+Run staff readiness rehearsal on the demo machine, including Ollama warm-up, one live generation, scripted fallback, and reset.
 ```
 
 ---

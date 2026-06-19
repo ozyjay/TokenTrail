@@ -4,6 +4,27 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-19 — Ollama warm-up rehearsal
+
+**Status:** warm-up verified; live generation tuning still needed
+
+**Context:** The warm-up flow was implemented across the adapter, server endpoint, configuration, and UI status. A local endpoint rehearsal was run against real Ollama.
+
+**Observed result:**
+
+- `ollama list` reported both configured Qwen models installed: `qwen3:1.7b` and `qwen3:4b`.
+- `.\scripts\check_ports.ps1` reported port `3100` available.
+- `.\scripts\test.ps1` passed.
+- A temporary Token Trail server reported `/health` as `ok`.
+- `POST /api/runtime/warmup` for `ollama:qwen3:1.7b` returned `status: ready` and `message: Local model warmed`.
+- `POST /api/generate-trace` fell back to the prepared trace because current Qwen generation settings returned an empty visible response.
+
+**Why this matters:** Warm-up is working and fallback remains mandatory, but live mode should not be considered Open Day-ready until generation settings produce a short visible response during setup.
+
+**Follow-up:** Tune the live generation prompt/settings or preferred model separately from the warm-up phase. Keep scripted mode as the booth-safe default until one warm-up and one live generation both succeed during rehearsal.
+
+---
+
 ## 2026-06-19 — Runtime model selection local fix
 
 **Status:** fixed locally and pushed

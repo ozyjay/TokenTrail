@@ -51,8 +51,8 @@ Recent live-generation findings:
 | 0 | Repository and local-service foundation | Done | Repeatable local app on fixed Open Day ports |
 | 1 | Scripted visual MVP | Mostly done | Public-facing token trail without live model dependency |
 | 2 | Curated Ollama live generation | Working, needs polish | Runtime-selected local model can generate text |
-| 3 | Warm-up and reliability | Planned / next | Model is warmed before visitor interaction |
-| 4 | Live-mode UI polish | Planned | Live output is readable and clearly labelled |
+| 3 | Warm-up and reliability | Done | Model is warmed before visitor interaction |
+| 4 | Live-mode UI polish | Basic pass done | Live output is readable and clearly labelled |
 | 5 | Educational visualisation improvements | Later | Better explanation without overclaiming real internals |
 | 6 | Open Day hardening | Final rehearsal phase | Staff-ready, resettable, reliable booth demo |
 
@@ -166,7 +166,7 @@ Warm the selected local model before visitor interaction, so the first visitor c
 
 ### Status
 
-Planned / next.
+Done.
 
 ### Supporting doc
 
@@ -214,7 +214,7 @@ Make live generation look intentional and readable, not like a broken or oversiz
 
 ### Status
 
-Planned.
+Basic pass done.
 
 ### Build
 
@@ -353,13 +353,13 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Add UI warm-up state.
+Run staff readiness and manual rehearsal.
 ```
 
 ### Then
 
 ```text
-Polish live output layout.
+Continue Open Day hardening.
 ```
 
 ### Always preserve
