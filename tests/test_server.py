@@ -15,6 +15,7 @@ def make_config(
     ollama_warmup_enabled: bool = True,
     ollama_warmup_timeout_seconds: float = 45.0,
     ollama_keep_alive: str = "30m",
+    ollama_reasoning_retry_tokens: dict[str, int] | None = None,
 ) -> RuntimeConfig:
     return RuntimeConfig(
         backend=backend,
@@ -31,6 +32,7 @@ def make_config(
         ollama_warmup_enabled=ollama_warmup_enabled,
         ollama_warmup_timeout_seconds=ollama_warmup_timeout_seconds,
         ollama_keep_alive=ollama_keep_alive,
+        ollama_reasoning_retry_tokens=ollama_reasoning_retry_tokens,
         vllm_base_url="http://127.0.0.1:8000/v1",
         vllm_model="Qwen/Qwen3-4B",
         vllm_models=("Qwen/Qwen3-4B",),
@@ -152,7 +154,10 @@ def test_generate_trace_returns_live_response() -> None:
         OllamaStatus(available=True, models=("qwen3:4b",)),
         generated_text="A robot joined orientation and waved.",
     )
-    state = server.build_server_state(make_config(backend="ollama"), ollama_adapter=adapter)
+    state = server.build_server_state(
+        make_config(backend="ollama", ollama_reasoning_retry_tokens={"qwen3:4b": 384}),
+        ollama_adapter=adapter,
+    )
     httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
@@ -182,6 +187,7 @@ def test_generate_trace_returns_live_response() -> None:
                 "max_tokens": 256,
                 "temperature": 0.4,
                 "disable_thinking": True,
+                "reasoning_retry_tokens": 384,
             },
         )
     ]

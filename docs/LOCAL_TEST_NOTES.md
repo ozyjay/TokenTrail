@@ -61,6 +61,29 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-20 — Live output fit and model list trim
+
+**Status:** fixed locally
+
+**Context:** Browser rehearsal showed `qwen3:1.7b` could still generate a story long enough to run off the generated-text panel. `gemma4:e2b` was also listed locally but did not load reliably on the RTX demo machine.
+
+**Fix captured in repo:**
+
+- Public live responses are capped to three sentences and roughly panel-safe length.
+- `qwen3:4b` has a configurable model-specific retry budget so it can get past a reasoning preamble before the public answer is extracted.
+- `qwen3:1.7b` keeps the normal budget path for lower latency and shorter output.
+- `.env.example` and the local `.env` now list only `qwen3:1.7b` and `qwen3:4b` as Ollama runtime options.
+
+Example:
+
+```env
+TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS=qwen3:4b=512
+```
+
+**Follow-up:** Restart Token Trail and recheck both Qwen runtimes in the browser. The live story should fit, and Gemma should no longer appear in the runtime selector.
+
+---
+
 ## 2026-06-19 — Runtime model selection local fix
 
 **Status:** fixed locally and pushed

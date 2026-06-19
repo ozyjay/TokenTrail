@@ -23,6 +23,7 @@ DEFAULT_OLLAMA_TEMPERATURE = 0.4
 DEFAULT_OLLAMA_TIMEOUT_SECONDS = 20.0
 DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS = 45.0
 DEFAULT_OLLAMA_KEEP_ALIVE = "30m"
+DEFAULT_OLLAMA_REASONING_RETRY_TOKENS = (("qwen3:4b", 512),)
 
 
 @dataclass(frozen=True)
@@ -46,12 +47,15 @@ class RuntimeConfig:
     ollama_warmup_enabled: bool = True
     ollama_warmup_timeout_seconds: float = DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS
     ollama_keep_alive: str = DEFAULT_OLLAMA_KEEP_ALIVE
+    ollama_reasoning_retry_tokens: dict[str, int] | None = None
 
     def __post_init__(self) -> None:
         if not self.ollama_models:
             object.__setattr__(self, "ollama_models", (self.ollama_model,))
         if not self.vllm_models:
             object.__setattr__(self, "vllm_models", (self.vllm_model,))
+        if self.ollama_reasoning_retry_tokens is None:
+            object.__setattr__(self, "ollama_reasoning_retry_tokens", dict(DEFAULT_OLLAMA_REASONING_RETRY_TOKENS))
 
 
 
@@ -87,6 +91,9 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
             get_setting("TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS))
         ),
         ollama_keep_alive=get_setting("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", DEFAULT_OLLAMA_KEEP_ALIVE),
+        ollama_reasoning_retry_tokens=_parse_model_int_setting(
+            get_setting("TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS", _format_model_int_setting(DEFAULT_OLLAMA_REASONING_RETRY_TOKENS))
+        ),
         vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
         vllm_model=vllm_model,
         vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
@@ -110,6 +117,37 @@ def _parse_bool_setting(value: str) -> bool:
     """Parse a permissive boolean environment setting."""
 
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _format_model_int_setting(values: tuple[tuple[str, int], ...]) -> str:
+    return ",".join(f"{model}={amount}" for model, amount in values)
+
+
+def _parse_model_int_setting(value: str) -> dict[str, int]:
+    parsed: dict[str, int] = {}
+    for raw_item in value.split(","):
+        item = raw_item.strip()
+        if not item:
+            continue
+
+        if "=" not in item:
+            continue
+
+        model, raw_amount = item.split("=", 1)
+        model = model.strip()
+        raw_amount = raw_amount.strip()
+        if not model or not raw_amount:
+            continue
+
+        try:
+            amount = int(raw_amount)
+        except ValueError:
+            continue
+
+        if amount > 0:
+            parsed[model] = amount
+
+    return parsed
 
 
 

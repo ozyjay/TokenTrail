@@ -66,12 +66,13 @@ class OllamaAdapter:
         max_tokens: int = 256,
         temperature: float = 0.4,
         disable_thinking: bool = True,
+        reasoning_retry_tokens: int | None = None,
     ) -> str:
         """Generate a short non-streaming continuation from a local Ollama model."""
 
         token_budgets = [max_tokens]
-        if disable_thinking and max_tokens < 512:
-            token_budgets.append(512)
+        if disable_thinking and reasoning_retry_tokens and max_tokens < reasoning_retry_tokens:
+            token_budgets.append(reasoning_retry_tokens)
 
         response_payload: Any = None
         for token_budget in token_budgets:
@@ -236,6 +237,9 @@ def _public_response_text(response_text: Any, *, disable_thinking: bool) -> str 
     if disable_thinking and _looks_like_reasoning(text):
         return None
 
+    if disable_thinking:
+        return _shorten_public_response(text)
+
     return text
 
 
@@ -255,3 +259,44 @@ def _looks_like_reasoning(text: str) -> bool:
         "thinking process",
     )
     return any(marker in lower_text[:500] for marker in reasoning_markers)
+
+
+def _shorten_public_response(text: str, max_chars: int = 320, max_sentences: int = 3) -> str:
+    """Keep live demo output short enough for the display."""
+
+    sentences = _split_sentences(text)
+    if sentences:
+        shortened = " ".join(sentences[:max_sentences]).strip()
+    else:
+        shortened = text.strip()
+
+    if len(shortened) <= max_chars:
+        return shortened
+
+    boundary = shortened.rfind(" ", 0, max_chars)
+    if boundary < max_chars // 2:
+        boundary = max_chars
+    return shortened[:boundary].rstrip(" ,;:") + "."
+
+
+def _split_sentences(text: str) -> list[str]:
+    sentences: list[str] = []
+    start = 0
+    for index, character in enumerate(text):
+        if character not in {".", "!", "?"}:
+            continue
+
+        next_index = index + 1
+        if next_index < len(text) and text[next_index] in {'"', "'"}:
+            next_index += 1
+
+        sentence = text[start:next_index].strip()
+        if sentence:
+            sentences.append(sentence)
+        start = next_index
+
+    remainder = text[start:].strip()
+    if remainder:
+        sentences.append(remainder)
+
+    return sentences

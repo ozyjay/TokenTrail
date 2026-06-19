@@ -158,8 +158,42 @@ def test_ollama_generate_retries_reasoning_only_response_with_larger_budget() ->
 
     adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
 
-    assert adapter.generate("qwen3:4b", "Prompt", max_tokens=96) == "A robot helped students debug code."
+    assert (
+        adapter.generate("qwen3:4b", "Prompt", max_tokens=96, reasoning_retry_tokens=512)
+        == "A robot helped students debug code."
+    )
     assert calls == [96, 512]
+
+
+def test_ollama_generate_does_not_retry_unprofiled_model() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        payload = json.loads(request.data.decode("utf-8"))
+        calls.append(payload["options"]["num_predict"])
+        return FakeResponse(b'{"response": "Hmm, the user wants a short story. I need to keep it concise."}')
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    try:
+        adapter.generate("qwen3:1.7b", "Prompt", max_tokens=96, reasoning_retry_tokens=None)
+    except AdapterError as error:
+        assert "empty response" in str(error)
+    else:
+        raise AssertionError("Expected AdapterError")
+
+    assert calls == [96]
+
+
+def test_ollama_generate_keeps_public_response_short() -> None:
+    def opener(request, timeout):
+        return FakeResponse(
+            b'{"response": "One. Two. Three. Four. Five. Six."}'
+        )
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    assert adapter.generate("qwen3:4b", "Prompt") == "One. Two. Three."
 
 
 def test_ollama_generate_handles_timeout() -> None:

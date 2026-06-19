@@ -217,6 +217,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     max_tokens=state.config.ollama_num_predict,
                     temperature=state.config.ollama_temperature,
                     disable_thinking=state.config.ollama_disable_thinking,
+                    reasoning_retry_tokens=state.config.ollama_reasoning_retry_tokens.get(runtime.model),
                 )
             except AdapterError:
                 self._send_json(_scripted_fallback_payload(runtime_id, trace))

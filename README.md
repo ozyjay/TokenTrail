@@ -184,6 +184,7 @@ TOKEN_TRAIL_OLLAMA_NUM_PREDICT=256
 TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.4
 TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=20
 TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=true
+TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS=qwen3:4b=512
 ```
 
 These defaults are intended to avoid Qwen3 spending the full token budget on reasoning before producing visible response text.
