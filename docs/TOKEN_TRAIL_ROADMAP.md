@@ -2,7 +2,7 @@
 
 **Project:** Token Trail  
 **Status:** Active build roadmap  
-**Last updated:** 2026-06-19
+**Last updated:** 2026-06-20
 
 ---
 
@@ -14,8 +14,8 @@ Token Trail should explain language-model generation clearly, visibly, and hones
 
 ```text
 Primary teaching mode: scripted token trail
-Optional live mode: local Ollama generation
-Planned educational upgrade: SLM live trace mode
+Optional live mode: local Ollama text generation
+Planned educational upgrade: custom HF Transformers live trace server
 Mandatory fallback: prepared trace replay
 ```
 
@@ -30,7 +30,7 @@ Token Trail currently has:
 - token blocks and simulated candidate probabilities;
 - runtime selector;
 - Ollama model discovery;
-- optional live local generation;
+- optional live local text generation;
 - warm-up path for available local Ollama runtimes;
 - live-mode paragraph layout;
 - scripted fallback for failed live generation;
@@ -39,13 +39,12 @@ Token Trail currently has:
 - launch and test scripts;
 - tests for config, server routes, adapters, traces, runtime selection, and setup.
 
-Recent live-generation findings:
+Recent backend decisions:
 
-- live generation works with local Ollama;
-- Qwen-style reasoning can consume token budget unless thinking is disabled or constrained;
-- first run can be slow if the model is cold, so warm-up is useful;
-- live text mode is readable but less educational than a replayable token trail;
-- Ollama logprobs/top-logprobs support makes an SLM live trace worth planning, but it should be proven on the actual local model before implementation.
+- Ollama remains the simple live text path.
+- Ollama logprob probing did not produce usable live trace data on the tested Qwen3 models.
+- vLLM remains a stretch/deferred desktop experiment because it is heavier than needed for the local laptop workflow.
+- A custom HF Transformers trace server is now the preferred planned path for replayable SLM token trails.
 
 ---
 
@@ -55,10 +54,10 @@ Recent live-generation findings:
 |---|---|---|---|
 | 0 | Repository and local-service foundation | Done | Repeatable local app on fixed Open Day ports |
 | 1 | Scripted visual MVP | Mostly done | Public-facing token trail without live model dependency |
-| 2 | Ollama live generation | Working, needs polish | Runtime-selected local model can generate text |
+| 2 | Ollama live text generation | Working, needs polish | Runtime-selected local model can generate short text |
 | 3 | Warm-up and reliability | Done | Model is warmed before visitor interaction |
 | 4 | Live-mode UI polish | Basic pass done | Live output is readable and clearly labelled |
-| 5 | SLM live trace planning | Planned / spike next | Convert model logprobs/top alternatives into replayable token trails |
+| 5 | HF Transformers live trace server | Planned / spike next | Convert local model scores into replayable token trails |
 | 6 | Open Day hardening | Final rehearsal phase | Staff-ready, resettable, reliable booth demo |
 
 ---
@@ -87,6 +86,7 @@ Done.
 
 - Token Trail app port: `3100`.
 - Future backend/API port: `8100`.
+- HF trace server / model adapter port: `8600`.
 - Ollama external runtime: `11434`.
 - Do not move Token Trail to port `8000`.
 
@@ -114,24 +114,17 @@ Mostly done.
 - Reset and replay.
 - Prepared trace fallback.
 
-### Remaining polish
-
-- Add at least one or two more strong curated traces if needed.
-- Improve text sizing for TV viewing.
-- Ensure the explanation panel reads clearly from 2–3 metres.
-- Confirm reset is instant and visually obvious.
-
 ### Go/no-go
 
 This phase is good enough when a visitor can understand the core idea in under 30 seconds with no live model running.
 
 ---
 
-## Phase 2 — Ollama live generation
+## Phase 2 — Ollama live text generation
 
 ### Goal
 
-Allow a selected local Ollama model to generate short text from a curated prompt.
+Allow a selected local Ollama model to generate short text from a curated or staff-edited prompt.
 
 ### Status
 
@@ -144,24 +137,16 @@ Working, needs polish.
 - Runtime availability display.
 - `POST /api/generate-trace` route.
 - Runtime-selected live generation.
-- Configurable generation settings:
-  - `TOKEN_TRAIL_OLLAMA_NUM_PREDICT`
-  - `TOKEN_TRAIL_OLLAMA_TEMPERATURE`
-  - `TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS`
-  - `TOKEN_TRAIL_OLLAMA_DISABLE_THINKING`
+- Configurable generation settings.
 - Scripted fallback when generation fails.
 
-### Remaining polish
+### Scope boundary
 
-- Verify preferred model for the actual demo machine.
-- Tune token budget and temperature for short readable output.
-- Keep live output concise enough for the display.
-- Avoid showing or implying private reasoning.
-- If staff prompt editing is kept, ensure it is wired through intentionally, resettable, constrained, and non-persistent.
+Ollama is now treated as the **live text** backend, not the preferred live token-trace backend.
 
 ### Go/no-go
 
-Live mode is usable only if it reliably returns a short visible answer during setup. If not, use scripted mode.
+Live text mode is usable only if it reliably returns a short visible answer during setup. If not, use scripted mode.
 
 ---
 
@@ -189,24 +174,6 @@ docs/OLLAMA_WARMUP_PLAN.md
 - UI warm-up state.
 - Staff-facing warm-up wording.
 
-### Required public wording
-
-Use:
-
-```text
-Warming local model...
-```
-
-```text
-Local model ready
-```
-
-Avoid:
-
-```text
-The AI is thinking
-```
-
 ### Go/no-go
 
 The app must never become stuck because warm-up fails. Warm-up failure should leave scripted fallback available.
@@ -231,31 +198,26 @@ Basic pass done.
 - Candidate-token panel replaced with an honest live-mode placeholder.
 - Scripted trace UI preserved for the teaching mode.
 
-### Remaining polish
-
-- Confirm generated text remains readable from 2–3 metres on the final TV.
-- Confirm long live output does not overflow awkwardly.
-- Confirm reset returns to the scripted/default layout every time.
-
 ### Go/no-go
 
 A live response should be readable on the TV without scrolling or developer intervention.
 
 ---
 
-## Phase 5 — SLM live trace mode
+## Phase 5 — Custom HF Transformers live trace server
 
 ### Goal
 
-Improve the teaching value by turning a local SLM response into a replayable token trail using returned logprobs/top alternatives.
+Improve the teaching value by turning a local model response into a replayable token trail using generated token IDs and per-step scores from Hugging Face Transformers.
 
 ### Status
 
 Planned / spike next.
 
-### Supporting doc
+### Supporting docs
 
 ```text
+docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md
 docs/SLM_LIVE_TRACE_PLAN.md
 ```
 
@@ -263,31 +225,28 @@ docs/SLM_LIVE_TRACE_PLAN.md
 
 ```text
 curated prompt
-  -> local Ollama generation with logprobs/top_logprobs
-  -> convert generated tokens and top returned alternatives into trace steps
+  -> local HF trace server on port 8600
+  -> generate with return_dict_in_generate=True and output_scores=True
+  -> convert generated token IDs and top returned alternatives into trace steps
   -> replay using the existing token trail animation
 ```
-
-### Why this matters
-
-Current live text mode proves that a local model can generate a response, but it does not show the token-by-token trail. SLM live trace mode would bring live generation closer to the scripted teaching experience while keeping fallback intact.
 
 ### Constraints
 
 - Non-streaming first.
 - Do not claim to show private reasoning.
 - Do not claim top returned alternatives are every possible next token.
-- Do not require SLM live trace for Open Day.
+- Do not require HF live trace for Open Day.
 - Keep scripted fallback mandatory.
 - Feature-gate this until proven on the final machine.
 
 ### First tiny step
 
-Run the API capability spike from `docs/SLM_LIVE_TRACE_PLAN.md` and confirm the selected local model returns usable `logprobs` and `top_logprobs`.
+Run a standalone HF trace server spike. Continue only if a small model returns trace-shaped JSON with non-empty steps in acceptable time on the target machine.
 
 ### Go/no-go
 
-Proceed only if the actual installed Ollama version and selected local model return stable enough logprob data for a clear public replay. Otherwise, keep live text mode plus scripted traces.
+Proceed only if the actual local machine can produce a clear short trace reliably. Otherwise, keep HF live trace disabled and use scripted traces plus Ollama live text.
 
 ---
 
@@ -322,43 +281,21 @@ Detailed staff checklist:
 docs/STAFF_READINESS_CHECKLIST.md
 ```
 
-```powershell
-ollama list
-.\scripts\test.ps1
-.\scripts\check_ports.ps1
-.\scripts\run.ps1
-```
-
-Then verify:
-
-1. Scripted trace starts and resets cleanly.
-2. Live runtime availability is shown accurately.
-3. Warm-up status appears for live runtime.
-4. Live generation either works or falls back cleanly.
-5. The display is readable from 2–3 metres.
-6. Staff can explain the demo in one sentence.
-
 ### Staff script
 
 ```text
 This shows the basic loop behind language models. The model turns text into tokens, predicts likely next tokens, chooses one, and repeats.
 ```
 
-Optional live-mode note:
+Optional HF live trace note:
 
 ```text
-This mode uses a local model running on this computer. If live generation is unavailable, the demo switches to a prepared trace.
-```
-
-Optional SLM live trace note:
-
-```text
-This mode builds a token trail from the top returned alternatives of a local model. It still does not show private model reasoning.
+This mode builds a token trail from top returned alternatives from a local model. It still does not show private model reasoning.
 ```
 
 ### Go/no-go
 
-Run live mode only if it works reliably during setup. Otherwise, run prepared trace mode.
+Run live modes only if they work reliably during setup. Otherwise, run prepared trace mode.
 
 ---
 
@@ -373,7 +310,7 @@ Do not prioritise these until the core demo is stable:
 - real private reasoning display;
 - claims that the model understands like a person;
 - claims that top returned alternatives are the full set of possible next tokens;
-- live mode as a required dependency.
+- any live backend as a required dependency.
 
 ---
 
@@ -382,20 +319,20 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Run Phase A — API capability spike from docs/SLM_LIVE_TRACE_PLAN.md.
+Run Phase A — standalone HF trace server spike from docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md.
 ```
 
 ### Then
 
 ```text
-If the spike succeeds, add adapter-only generate_with_logprobs() and tests.
-If the spike fails, keep SLM live trace disabled and continue Open Day hardening.
+If the spike succeeds, add pure trace conversion helpers and tests.
+If the spike fails, keep HF live trace disabled and continue Open Day hardening.
 ```
 
 ### Always preserve
 
 ```text
 Scripted fallback remains mandatory.
-Live generation remains optional.
-SLM live trace remains optional until proven reliable.
+Ollama live text remains optional.
+HF live trace remains optional until proven reliable.
 ```
