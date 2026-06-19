@@ -2,7 +2,7 @@
 
 **Token Trail** is an Open Day demo that shows how a language model generates text one token at a time.
 
-Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. When a local Ollama model is selected, staff can edit the live prompt before generation. Scripted fallback remains curated and static. The goal is to make language model generation visible, understandable, and honest without claiming to show hidden model reasoning.
+Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. Scripted traces remain the guaranteed teaching mode. Ollama can optionally provide short live text generation. A custom Hugging Face Transformers trace server is the preferred planned path for future live token traces.
 
 > Public tagline: **Watch a language model predict text one token at a time.**
 
@@ -10,47 +10,34 @@ Visitors choose a curated prompt, then watch the system break the prompt into to
 
 ## Current status
 
-Initial scripted visual MVP scaffold with optional editable Ollama live generation.
+Current app status: **scripted MVP with optional Ollama live text, warm-up, live-mode layout polish, and three prepared traces**.
 
 The current app:
 
-- uses Poetry, matching the VoiceChanger project style;
-- targets Python 3.12, with `.python-version` pinned to `3.12.13` for reproducible Framework Desktop setup;
 - runs as a local web demo at `http://127.0.0.1:3100`;
-- uses the Open Day fixed local service port map;
-- checks its launch port before starting;
+- follows the Open Day fixed local service port map;
 - exposes a health check at `http://127.0.0.1:3100/health`;
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
-- can optionally use a local Ollama model for short live generation from an editable prompt;
+- can optionally use a local Ollama model for short live text generation;
 - keeps scripted fallback prompts curated and static;
-- includes tests for traces, config, docs, adapters, and project setup;
+- includes tests for traces, config, docs, adapters, server routes, and project setup;
 - supports Windows PowerShell scripts and Linux/macOS shell scripts.
 
 Scripted mode remains the guaranteed fallback for Open Day.
 
 ---
 
-## Purpose
+## Backend direction
 
-Token Trail is designed for a public university Open Day booth.
+| Backend | Role | Status |
+|---|---|---|
+| Scripted traces | Mandatory fallback and primary teaching mode | Required |
+| Ollama | Simple local live text generation | Working optional path |
+| Custom Hugging Face Transformers trace server | Planned live token-trace path | Preferred next spike |
+| vLLM | Desktop/GPU experiment if needed | Stretch/deferred |
 
-It should be:
-
-- quick to understand;
-- visible on a large screen;
-- safe for mixed-age visitors;
-- reliable in a noisy booth environment;
-- usable by staff or student ambassadors;
-- able to fall back to scripted examples if the live model fails.
-
-This demo explains the basic loop behind LLM text generation:
-
-1. text is split into tokens;
-2. the model estimates likely next tokens;
-3. one token is selected;
-4. the generated token is added to the context;
-5. the process repeats.
+The HF trace server is **not implemented yet**. It is planned as a separate local service on the reserved model-adapter port.
 
 ---
 
@@ -59,7 +46,6 @@ This demo explains the basic loop behind LLM text generation:
 ```text
 src/
   token_trail/
-    __init__.py
     adapters/       # Local model backend adapters
     config.py       # Environment-driven runtime config
     ports.py        # Launch-time port checks
@@ -70,18 +56,18 @@ web/
   app.js            # Token trail animation
   styles.css        # Public-display styling
 docs/
-  DEVELOPMENT_ENVIRONMENTS.md
   MODEL_BACKENDS.md
-  OLLAMA_ADAPTER_PLAN.md
+  TOKEN_TRAIL_ROADMAP.md
+  HF_TRANSFORMERS_TRACE_SERVER_PLAN.md
+  SLM_LIVE_TRACE_PLAN.md
+  OLLAMA_PHASE_2_GENERATION_PLAN.md
+  OLLAMA_WARMUP_PLAN.md
+  STAFF_READINESS_CHECKLIST.md
 scripts/
-  setup.ps1
-  test.ps1
-  check_ports.ps1
-  run.ps1
-  setup.sh
-  test.sh
-  check_ports.sh
-  run.sh
+  setup.ps1 / setup.sh
+  test.ps1 / test.sh
+  check_ports.ps1 / check_ports.sh
+  run.ps1 / run.sh
 tests/
 ```
 
@@ -92,7 +78,8 @@ tests/
 - Python 3.12
 - Poetry
 - PowerShell on Windows, or Bash on Linux/macOS
-- Optional: Ollama for local live generation
+- Optional: Ollama for local live text generation
+- Planned only: Hugging Face Transformers/PyTorch for future live trace server
 
 For the Framework Desktop and final rehearsal, use the pinned Python version:
 
@@ -102,21 +89,18 @@ pyenv local 3.12.13
 python --version
 ```
 
-For personal machines, an existing compatible Python 3.12 install should be fine for development.
-
 ---
 
 ## Ports and local services
 
-Token Trail follows the Open Day fixed local service convention.
-
 | Service | Default URL | Notes |
 |---|---|---|
-| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process MVP |
+| Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current app |
 | Health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
-| Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later frontend/backend split |
-| Ollama | `http://127.0.0.1:11434` | External model runtime |
-| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | External model runtime; Token Trail itself must not use port 8000 |
+| Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later split |
+| HF trace server / model adapter | `http://127.0.0.1:8600` | Planned live trace server |
+| Ollama | `http://127.0.0.1:11434` | External runtime for live text |
+| vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | Stretch/deferred; Token Trail itself must not use 8000 |
 
 Do not change ports randomly for rehearsal or Open Day. If a required port is occupied, the launch scripts should fail clearly.
 
@@ -169,66 +153,19 @@ TOKEN_TRAIL_PORT=3100
 TOKEN_TRAIL_BACKEND_PORT=8100
 ```
 
-Values in `.env` are loaded automatically by the local server. Real environment variables take precedence over values in the file.
-
-Future backend values:
+Ollama live text settings include:
 
 ```text
 TOKEN_TRAIL_BACKEND=ollama
-TOKEN_TRAIL_BACKEND=vllm
-```
-
-Ollama live generation settings:
-
-```text
-TOKEN_TRAIL_OLLAMA_NUM_PREDICT=256
-TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.4
-TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=20
+TOKEN_TRAIL_OLLAMA_MODEL=qwen3:1.7b
+TOKEN_TRAIL_OLLAMA_NUM_PREDICT=96
+TOKEN_TRAIL_OLLAMA_TEMPERATURE=0.3
+TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS=45
 TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=true
-TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS=qwen3:4b=512
+TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED=true
 ```
 
-These defaults are intended to avoid Qwen3 spending the full token budget on reasoning before producing visible response text.
-
-See:
-
-- `docs/DEVELOPMENT_ENVIRONMENTS.md`
-- `docs/MODEL_BACKENDS.md`
-- `docs/OLLAMA_ADAPTER_PLAN.md`
-
----
-
-## What visitors do
-
-Visitors can:
-
-- choose a curated prompt;
-- edit the prompt when an available local Ollama runtime is selected;
-- watch token blocks appear step by step;
-- compare likely next-token options;
-- see the selected token added to the generated text;
-- reset and replay the trail.
-
-Example prompt:
-
-```text
-Write a short story about a robot at university.
-```
-
----
-
-## What the big screen shows
-
-The large display should make the process obvious from a few metres away.
-
-Suggested panels:
-
-1. **Prompt** — the selected curated prompt, or the editable live prompt when a local Ollama runtime is active.
-2. **Tokenised prompt** — the prompt split into visible token blocks.
-3. **Next-token prediction** — candidate tokens with probability-style bars.
-4. **Selected token** — the token chosen for this step.
-5. **Generated text** — the response growing token by token.
-6. **Controls** — prompt selection, live prompt editing when enabled, runtime selection, start, and reset.
+HF trace settings should only be added after the standalone HF trace server spike succeeds.
 
 ---
 
@@ -260,8 +197,6 @@ Default rules:
 - keep logs technical and non-identifying;
 - keep scripted fallback prompts curated and static.
 
-If prompt logging is ever enabled, document why, where it is stored, how long it is retained, and what signage is required.
-
 ---
 
 ## Fallback mode
@@ -274,7 +209,7 @@ Fallback should support:
 - simulated candidate probabilities;
 - replayable curated examples;
 - at least three prepared traces;
-- clear label such as:
+- a clear label such as:
 
 ```text
 Prepared demo mode: showing a saved generation trace.
@@ -315,59 +250,18 @@ The probabilities are not guarantees. They show likely continuations, and the mo
 
 ---
 
-## Development phases
+## Development roadmap
 
-### Phase 1 — Scripted visual MVP
+See:
 
-Goal: prove the public-facing experience without depending on a live model.
-
-Build:
-
-- full-screen UI;
-- curated prompt selector;
-- token blocks;
-- animated next-token steps;
-- simulated probability bars;
-- reset button;
-- replay mode.
-
-### Phase 2 — Local model integration
-
-Goal: connect the visualiser to a real local model where practical.
-
-Build:
-
-- tokenizer adapter;
-- model backend adapter;
-- streamed generation;
-- real or approximated top-k token display;
-- graceful timeout handling;
-- switch between live and scripted mode.
-
-### Phase 3 — Open Day hardening
-
-Goal: make it reliable for public booth use.
-
-Build:
-
-- kiosk/full-screen launch;
-- staff controls;
-- visible fallback state;
-- prompt clearing;
-- packaging/startup scripts;
-- demo machine checklist;
-- no-terminal reset path.
-
----
-
-## Repository status
-
-Current status: **scripted MVP with optional editable Ollama live generation, warm-up, live-mode layout polish, and three prepared traces**
+```text
+docs/TOKEN_TRAIL_ROADMAP.md
+```
 
 Next concrete build step:
 
 ```text
-Run browser/display rehearsal with docs/STAFF_READINESS_CHECKLIST.md.
+Run the standalone HF Transformers trace server spike from docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md.
 ```
 
 ---
