@@ -92,15 +92,36 @@ def test_ollama_generate_posts_expected_payload() -> None:
         "timeout": 3.0,
         "payload": {
             "model": "qwen3:4b",
-            "prompt": "Write a short story.",
+            "prompt": "/no_think\n\nWrite a short, direct answer.\nDo not show reasoning.\n\nPrompt:\nWrite a short story.",
             "stream": False,
             "options": {
                 "num_predict": 12,
-                "temperature": 0.7,
+                "temperature": 0.4,
             },
         },
         "content_type": "application/json",
     }
+
+
+def test_ollama_generate_supports_custom_temperature_and_no_thinking_toggle() -> None:
+    seen = {}
+
+    def opener(request, timeout):
+        seen["payload"] = json.loads(request.data.decode("utf-8"))
+        return FakeResponse(b'{"response": "A live response."}')
+
+    adapter = OllamaAdapter("http://127.0.0.1:11434", opener=opener)
+
+    adapter.generate(
+        "qwen3:4b",
+        "Prompt",
+        temperature=0.2,
+        max_tokens=44,
+        disable_thinking=False,
+    )
+
+    assert seen["payload"]["prompt"] == "Write a short, direct answer.\nDo not show reasoning.\n\nPrompt:\nPrompt"
+    assert seen["payload"]["options"] == {"num_predict": 44, "temperature": 0.2}
 
 
 def test_ollama_generate_returns_response_text() -> None:
