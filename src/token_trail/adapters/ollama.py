@@ -1,4 +1,4 @@
-"""Ollama adapter for local model discovery."""
+"""Ollama adapter for local model discovery and generation."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class OllamaStatus:
 
 
 class OllamaAdapter:
-    """Discover locally installed Ollama models."""
+    """Discover locally installed Ollama models and generate short responses."""
 
     def __init__(self, base_url: str, timeout_seconds: float = 1.0, opener: UrlOpen = urlopen) -> None:
         self.base_url = base_url.rstrip("/") + "/"
@@ -63,17 +63,19 @@ class OllamaAdapter:
         prompt: str,
         *,
         timeout_seconds: float = 20.0,
-        max_tokens: int = 80,
+        max_tokens: int = 256,
+        temperature: float = 0.4,
+        disable_thinking: bool = True,
     ) -> str:
         """Generate a short non-streaming continuation from a local Ollama model."""
 
         payload = {
             "model": model,
-            "prompt": prompt,
+            "prompt": _format_prompt(prompt, disable_thinking=disable_thinking),
             "stream": False,
             "options": {
                 "num_predict": max_tokens,
-                "temperature": 0.7,
+                "temperature": temperature,
             },
         }
         request = Request(
@@ -132,3 +134,21 @@ class OllamaAdapter:
                 names.append(name)
 
         return tuple(names)
+
+
+def _format_prompt(prompt: str, *, disable_thinking: bool) -> str:
+    """Format a prompt for short, public-demo-friendly Ollama generation."""
+
+    base_prompt = "\n".join(
+        [
+            "Write a short, direct answer.",
+            "Do not show reasoning.",
+            "",
+            "Prompt:",
+            prompt,
+        ]
+    )
+    if not disable_thinking:
+        return base_prompt
+
+    return f"/no_think\n\n{base_prompt}"
