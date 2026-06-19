@@ -26,9 +26,10 @@ from token_trail.config import load_config  # noqa: E402
 
 
 DEFAULT_PROMPT = "Write one sentence about a robot at university."
-DEFAULT_MAX_TOKENS = 32
+DEFAULT_MAX_TOKENS = 96
 DEFAULT_TEMPERATURE = 0.3
 DEFAULT_TOP_LOGPROBS = 5
+NO_THINK_PREFIX = "/no_think"
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,10 @@ def extract_token_logprob_entries(payload: dict[str, Any]) -> list[TokenLogprobE
 
 def has_response_text(payload: dict[str, Any]) -> bool:
     return bool(str(payload.get("response", "")).strip())
+
+
+def has_thinking_text(payload: dict[str, Any]) -> bool:
+    return bool(str(payload.get("thinking", "")).strip())
 
 
 def entry_has_top_alternatives(entry: TokenLogprobEntry) -> bool:
@@ -129,8 +134,15 @@ def _as_float(value: Any) -> float | None:
     return None
 
 
-def build_payload(*, model: str, prompt: str, top_logprobs: int, max_tokens: int) -> dict[str, Any]:
-    return {
+def build_payload(
+    *,
+    model: str,
+    prompt: str,
+    top_logprobs: int,
+    max_tokens: int,
+    disable_thinking: bool = False,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "model": model,
         "prompt": prompt,
         "stream": False,
@@ -141,6 +153,19 @@ def build_payload(*, model: str, prompt: str, top_logprobs: int, max_tokens: int
             "top_logprobs": top_logprobs,
         },
     }
+
+    if disable_thinking:
+        payload["prompt"] = _with_no_think_prefix(prompt)
+        payload["think"] = False
+
+    return payload
+
+
+def _with_no_think_prefix(prompt: str) -> str:
+    stripped_prompt = prompt.lstrip()
+    if stripped_prompt.startswith(NO_THINK_PREFIX):
+        return prompt
+    return f"{NO_THINK_PREFIX}\n\n{prompt}"
 
 
 def post_generate(base_url: str, payload: dict[str, Any], timeout_seconds: float) -> dict[str, Any]:
@@ -157,16 +182,20 @@ def post_generate(base_url: str, payload: dict[str, Any], timeout_seconds: float
 
 def print_summary(*, model: str, payload: dict[str, Any], entries: list[TokenLogprobEntry]) -> None:
     response_returned = has_response_text(payload)
+    thinking_returned = has_thinking_text(payload)
     entries_with_logprobs = [entry for entry in entries if entry.logprob is not None]
     top_alternatives_present = any(entry_has_top_alternatives(entry) for entry in entries)
     usable = response_returned and bool(entries_with_logprobs) and top_alternatives_present
 
     print("Ollama logprobs probe")
-    print(f"Model tested: {model}")
-    print(f"Response text returned: {_yes_no(response_returned)}")
-    print(f"Logprobs present: {_yes_no(bool(entries_with_logprobs))}")
-    print(f"Generated token entries with logprobs: {len(entries_with_logprobs)}")
-    print(f"Top alternatives present: {_yes_no(top_alternatives_present)}")
+    print(f"model tested: {model}")
+    print(f"response text returned: {_yes_no(response_returned)}")
+    print(f"thinking text returned: {_yes_no(thinking_returned)}")
+    print(f"done_reason: {payload.get('done_reason', 'missing')}")
+    print(f"eval_count: {payload.get('eval_count', 'missing')}")
+    print(f"logprobs present: {_yes_no(bool(entries_with_logprobs))}")
+    print(f"generated token entries with logprobs: {len(entries_with_logprobs)}")
+    print(f"top alternatives present: {_yes_no(top_alternatives_present)}")
     print()
     print("First generated token entries:")
 
@@ -180,10 +209,16 @@ def print_summary(*, model: str, payload: dict[str, Any], entries: list[TokenLog
     print()
     print("Model output handling: response text, if present, is model output and should not be treated as public reasoning.")
     print()
-    if usable:
-        print("Recommendation: PASS: usable for SLM live trace")
+    if not response_returned and thinking_returned:
+        print("FAIL: model produced thinking output but no visible response text.")
+    elif response_returned and not entries_with_logprobs:
+        print("FAIL: visible response returned, but logprobs were not returned by this Ollama/model combination.")
+    elif usable:
+        print("PASS: usable for SLM live trace.")
+    elif response_returned:
+        print("FAIL: visible response and logprobs returned, but top_logprobs alternatives were not returned.")
     else:
-        print("Recommendation: FAIL: keep live text mode and scripted trace mode")
+        print("FAIL: no visible response text was returned.")
 
 
 def _yes_no(value: bool) -> str:
@@ -210,6 +245,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--prompt", default=DEFAULT_PROMPT, help="Prompt to send to Ollama")
     parser.add_argument("--top-logprobs", default=DEFAULT_TOP_LOGPROBS, type=int, help="Requested top alternatives per token")
     parser.add_argument("--max-tokens", default=DEFAULT_MAX_TOKENS, type=int, help="Requested generated token count")
+    parser.add_argument("--dump-json", action="store_true", help="Print the full raw JSON response from Ollama")
     return parser.parse_args()
 
 
@@ -221,6 +257,7 @@ def main() -> int:
         prompt=args.prompt,
         top_logprobs=args.top_logprobs,
         max_tokens=args.max_tokens,
+        disable_thinking=True,
     )
 
     try:
@@ -236,6 +273,9 @@ def main() -> int:
         return 2
 
     entries = extract_token_logprob_entries(response_payload)
+    if args.dump_json:
+        print(json.dumps(response_payload, ensure_ascii=False, indent=2))
+        print()
     print_summary(model=args.model, payload=response_payload, entries=entries)
     return 0
 
