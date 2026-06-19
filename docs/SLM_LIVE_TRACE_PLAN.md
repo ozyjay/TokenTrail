@@ -396,6 +396,15 @@ ollama list
 
 Then run a small local request using `stream=false`, `logprobs=true`, and `top_logprobs=5`.
 
+Developer probe:
+
+```powershell
+python scripts/probe_ollama_logprobs.py
+python scripts/probe_ollama_logprobs.py --model qwen3:1.7b
+```
+
+The probe reads the Token Trail Ollama base URL and selected model from config by default, sends a non-streaming `/api/generate` request, and prints a go/no-go recommendation. This is only a capability spike; it does not add UI behaviour, a backend endpoint, live trace conversion, or a feature flag.
+
 Go/no-go:
 
 - Continue only if the local model returns a `logprobs` array with token entries and top alternatives.
