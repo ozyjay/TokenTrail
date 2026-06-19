@@ -27,6 +27,22 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-19 — Browser rehearsal attempt
+
+**Status:** staff checklist added; visual browser pass still required
+
+**Context:** After endpoint-level warm-up and live generation passed, a browser/display rehearsal was attempted from the automation environment.
+
+**Observed result:**
+
+- Token Trail reported `/health` as `ok` with Ollama available.
+- The in-app browser automation runtime failed during setup with a local sandbox startup error before it could navigate to `http://127.0.0.1:3100`.
+- A staff-facing checklist was added so the remaining visual rehearsal can be run directly on the demo display.
+
+**Follow-up:** Run `docs/STAFF_READINESS_CHECKLIST.md` in a real browser on the demo machine. Confirm warm-up status, live paragraph layout, reset, scripted mode, and TV-distance readability.
+
+---
+
 ## 2026-06-19 — Runtime model selection local fix
 
 **Status:** fixed locally and pushed

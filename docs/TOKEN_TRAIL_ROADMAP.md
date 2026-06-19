@@ -299,6 +299,12 @@ Final rehearsal phase.
 
 ### Rehearsal checklist
 
+Detailed staff checklist:
+
+```text
+docs/STAFF_READINESS_CHECKLIST.md
+```
+
 ```powershell
 ollama list
 .\scripts\test.ps1
@@ -353,7 +359,7 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Run staff readiness and manual rehearsal.
+Run browser/display rehearsal using docs/STAFF_READINESS_CHECKLIST.md.
 ```
 
 ### Then

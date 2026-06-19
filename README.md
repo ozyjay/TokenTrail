@@ -363,7 +363,7 @@ Current status: **scripted MVP with optional Ollama live generation, warm-up, an
 Next concrete build step:
 
 ```text
-Run staff readiness rehearsal on the demo machine, including Ollama warm-up, one live generation, scripted fallback, and reset.
+Run browser/display rehearsal with docs/STAFF_READINESS_CHECKLIST.md.
 ```
 
 ---
