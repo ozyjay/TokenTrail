@@ -40,6 +40,7 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
         "TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS",
         "TOKEN_TRAIL_HF_TRACE_TEMPERATURE",
         "TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_MODEL_CONFIG_PATH",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -197,4 +198,83 @@ def test_hf_trace_default_model_is_included_in_model_options(monkeypatch) -> Non
 
     config = load_config(env_file=None)
 
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")
+
+
+def test_config_reads_json_model_config(tmp_path, monkeypatch) -> None:
+    for name in (
+        "TOKEN_TRAIL_BACKEND",
+        "TOKEN_TRAIL_OLLAMA_MODEL",
+        "TOKEN_TRAIL_OLLAMA_MODELS",
+        "TOKEN_TRAIL_VLLM_MODEL",
+        "TOKEN_TRAIL_VLLM_MODELS",
+        "TOKEN_TRAIL_HF_TRACE_MODEL",
+        "TOKEN_TRAIL_HF_TRACE_MODELS",
+        "TOKEN_TRAIL_MODEL_CONFIG_PATH",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    model_config = tmp_path / "models.json"
+    model_config.write_text(
+        """
+        {
+          "defaults": {
+            "backend": "hf-trace",
+            "ollama_model": "qwen3:1.7b",
+            "vllm_model": "Qwen/Qwen3-4B",
+            "hf_trace_model": "Qwen/Qwen2.5-0.5B-Instruct"
+          },
+          "ollama": [
+            {"model": "qwen3:1.7b"},
+            {"model": "qwen3:4b"},
+            {"model": "qwen3:1.7b"}
+          ],
+          "vllm": [
+            {"model": "Qwen/Qwen3-4B"}
+          ],
+          "hf_trace": [
+            {"model": "Qwen/Qwen2.5-0.5B-Instruct"},
+            {"model": "Qwen/Qwen2.5-1.5B-Instruct"}
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    env_file = FakeEnvFile(f"TOKEN_TRAIL_MODEL_CONFIG_PATH={model_config}\n")
+
+    config = load_config(env_file=env_file)
+
+    assert config.backend == "hf-trace"
+    assert config.ollama_model == "qwen3:1.7b"
+    assert config.ollama_models == ("qwen3:1.7b", "qwen3:4b")
+    assert config.vllm_model == "Qwen/Qwen3-4B"
+    assert config.vllm_models == ("Qwen/Qwen3-4B",)
+    assert config.hf_trace_model == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")
+
+
+def test_environment_overrides_json_model_config(tmp_path, monkeypatch) -> None:
+    model_config = tmp_path / "models.json"
+    model_config.write_text(
+        """
+        {
+          "defaults": {
+            "backend": "hf-trace",
+            "hf_trace_model": "Qwen/Qwen2.5-1.5B-Instruct"
+          },
+          "hf_trace": [
+            {"model": "Qwen/Qwen2.5-1.5B-Instruct"}
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TOKEN_TRAIL_MODEL_CONFIG_PATH", str(model_config))
+    monkeypatch.setenv("TOKEN_TRAIL_BACKEND", "scripted")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+
+    config = load_config(env_file=None)
+
+    assert config.backend == "scripted"
+    assert config.hf_trace_model == "Qwen/Qwen2.5-0.5B-Instruct"
     assert config.hf_trace_models == ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")

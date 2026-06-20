@@ -1,3 +1,4 @@
+import json
 import tomllib
 from pathlib import Path
 
@@ -11,6 +12,7 @@ def test_required_project_files_exist() -> None:
         "poetry.lock",
         ".python-version",
         "README.md",
+        "config/models.json",
         "scripts/setup.ps1",
         "scripts/test.ps1",
         "scripts/run.ps1",
@@ -51,3 +53,14 @@ def test_hf_trace_probe_powershell_script_installs_optional_group_and_forwards_a
     assert "poetry install --with hf-trace" in script
     assert "$env:PYTHONPATH = \"src\"" in script
     assert "poetry run python scripts/probe_hf_trace.py @args" in script
+
+
+def test_model_config_file_lists_runtime_models() -> None:
+    model_config = json.loads((PROJECT_ROOT / "config" / "models.json").read_text(encoding="utf-8"))
+
+    assert model_config["defaults"]["hf_trace_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert [entry["model"] for entry in model_config["ollama"]] == ["qwen3:1.7b", "qwen3:4b"]
+    assert [entry["model"] for entry in model_config["hf_trace"]] == [
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "Qwen/Qwen2.5-0.5B-Instruct",
+    ]

@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "backend": "hf-trace",
+    "ollama_model": "qwen3:1.7b",
+    "vllm_model": "Qwen/Qwen3-4B",
+    "hf_trace_model": "Qwen/Qwen2.5-1.5B-Instruct"
+  },
+  "ollama": [
+    {
+      "model": "qwen3:1.7b"
+    },
+    {
+      "model": "qwen3:4b"
+    }
+  ],
+  "hf_trace": [
+    {
+      "model": "Qwen/Qwen2.5-1.5B-Instruct"
+    },
+    {
+      "model": "Qwen/Qwen2.5-0.5B-Instruct"
+    }
+  ],
+  "vllm": [
+    {
+      "model": "Qwen/Qwen3-4B"
+    }
+  ]
+}

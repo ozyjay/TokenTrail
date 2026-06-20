@@ -158,7 +158,10 @@ TOKEN_TRAIL_BACKEND=scripted
 TOKEN_TRAIL_HOST=127.0.0.1
 TOKEN_TRAIL_PORT=3100
 TOKEN_TRAIL_BACKEND_PORT=8100
+TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 ```
+
+Runtime model lists live in `config/models.json`. Direct `.env` values such as `TOKEN_TRAIL_OLLAMA_MODEL`, `TOKEN_TRAIL_HF_TRACE_MODEL`, or the comma-separated `*_MODELS` overrides still win for machine-specific testing.
 
 Ollama live text settings include:
 
@@ -178,10 +181,10 @@ HF trace settings should only be added after the standalone HF trace server spik
 TOKEN_TRAIL_BACKEND=hf-trace
 TOKEN_TRAIL_HF_TRACE_ENABLED=true
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
+# TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 ```
 
-`TOKEN_TRAIL_HF_TRACE_MODEL` sets the initial HF trace runtime. `TOKEN_TRAIL_HF_TRACE_MODELS` lists the HF trace models shown in the runtime selector.
+`TOKEN_TRAIL_HF_TRACE_MODEL` sets the initial HF trace runtime. `config/models.json` lists the HF trace models shown in the runtime selector; `TOKEN_TRAIL_HF_TRACE_MODELS` is still available as a direct comma-separated override.
 
 ---
 
