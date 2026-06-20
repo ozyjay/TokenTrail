@@ -15,10 +15,16 @@
   ],
   "hf_trace": [
     {
+      "model": "Qwen/Qwen2.5-0.5B-Instruct"
+    },
+    {
       "model": "Qwen/Qwen2.5-1.5B-Instruct"
     },
     {
-      "model": "Qwen/Qwen2.5-0.5B-Instruct"
+      "model": "HuggingFaceTB/SmolLM2-1.7B-Instruct"
+    },
+    {
+      "model": "Qwen/Qwen2.5-3B-Instruct"
     }
   ],
   "vllm": [
