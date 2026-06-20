@@ -158,6 +158,34 @@ TOKEN_TRAIL_VLLM_MODELS=Qwen/Qwen3-4B
 
 ---
 
+## HF trace CLI probe
+
+**Context:** The HF trace path is still a spike. The CLI probe checks whether the current machine can load a small Hugging Face Transformers causal language model and convert generated token scores into Token Trail-shaped `hf-live-trace` JSON.
+
+**Install optional probe dependencies in the active pyenv Python if needed:**
+
+```bash
+python3 -m pip install torch transformers
+```
+
+**Run a compact human-readable probe:**
+
+```bash
+python3 scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```
+
+**Run JSON mode for contract inspection:**
+
+```bash
+python3 scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
+```
+
+**Pass condition:** generated text appears, generation steps are non-empty, each step has candidate alternatives, elapsed time is acceptable for rehearsal, and the script exits with status `0`.
+
+**Fail condition:** keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` if model load time, memory use, generation latency, or trace quality is not acceptable on the target machine.
+
+---
+
 ## Local testing rule
 
 When a local machine fix is needed:
