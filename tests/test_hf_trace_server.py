@@ -120,7 +120,12 @@ def test_hf_trace_server_rejects_bad_requests() -> None:
 
 def test_hf_trace_server_suppresses_known_resource_tracker_shutdown_warning() -> None:
     source = SCRIPT_PATH.read_text(encoding="utf-8")
+    sitecustomize = SCRIPT_PATH.parent / "hf_trace_python_startup" / "sitecustomize.py"
 
     assert "warnings.filterwarnings" in source
+    assert "_install_resource_tracker_warning_filter()" in source
+    assert "hf_trace_python_startup" in source
     assert "leaked semaphore objects" in source
     assert "multiprocessing.resource_tracker" in source
+    assert sitecustomize.exists()
+    assert "leaked semaphore objects" in sitecustomize.read_text(encoding="utf-8")

@@ -176,8 +176,13 @@ function renderCandidates(step) {
   );
 }
 
-function joinTokens(tokens) {
-  return tokens.join(" ").replaceAll(" .", ".").replaceAll(" ,", ",").replaceAll(" :", ":");
+function hasDecodedSpacing(tokens) {
+  return tokens.some((token) => /^\s|\s$/.test(token));
+}
+
+function joinDisplayTokens(tokens, preserveDecodedSpacing = true) {
+  const text = preserveDecodedSpacing || hasDecodedSpacing(tokens) ? tokens.join("") : tokens.join(" ");
+  return text.replaceAll(" .", ".").replaceAll(" ,", ",").replaceAll(" :", ":");
 }
 
 function trailDelayMs() {
@@ -200,7 +205,7 @@ function runStep() {
   const step = currentTrace.steps[stepIndex];
   renderCandidates(step);
   generatedTokens.push(step.selected_token);
-  generatedText.textContent = joinTokens(generatedTokens);
+  generatedText.textContent = joinDisplayTokens(generatedTokens, currentTrace.mode === "hf-live-trace");
   explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
   stepIndex += 1;
   scheduleNextStep();
@@ -240,8 +245,8 @@ function showHfLiveTrace(payload) {
 function loadFallbackTrace(payload) {
   currentTrace = payload.trace || selectedTrace || currentTrace;
   resetDemo();
-  resetPromptToTrace();
-  runNotice = "Live generation unavailable — showing prepared trace";
+  renderPrompt();
+  runNotice = payload.message || "Live generation unavailable — showing prepared trace";
   explanation.textContent = runNotice;
   startPreparedTrail();
 }

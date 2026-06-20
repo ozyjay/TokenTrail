@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import sys
 import warnings
 from dataclasses import dataclass
@@ -25,13 +26,25 @@ from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8600
 DEFAULT_CANDIDATE_SOURCE = "forward-logits"
+PYTHON_STARTUP_ROOT = PROJECT_ROOT / "scripts" / "hf_trace_python_startup"
 
-warnings.filterwarnings(
-    "ignore",
-    message=r"resource_tracker: There appear to be .* leaked semaphore objects to clean up at shutdown",
-    category=UserWarning,
-    module="multiprocessing.resource_tracker",
-)
+
+def _install_resource_tracker_warning_filter() -> None:
+    warnings.filterwarnings(
+        "ignore",
+        message=r"resource_tracker: There appear to be .* leaked semaphore objects to clean up at shutdown",
+        category=UserWarning,
+        module="multiprocessing.resource_tracker",
+    )
+
+    existing_pythonpath = os.environ.get("PYTHONPATH", "")
+    pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
+    startup_entry = str(PYTHON_STARTUP_ROOT)
+    if startup_entry not in pythonpath_entries:
+        os.environ["PYTHONPATH"] = os.pathsep.join([startup_entry, *pythonpath_entries])
+
+
+_install_resource_tracker_warning_filter()
 
 
 class HfTraceServerError(Exception):

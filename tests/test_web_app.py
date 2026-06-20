@@ -40,6 +40,25 @@ def test_web_app_prefers_active_trace_tokens_for_prompt_display() -> None:
     assert "renderTokens(promptTokens, trace.prompt_tokens);" in app_js
 
 
+def test_web_app_preserves_hf_decoded_token_spacing() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "function hasDecodedSpacing(tokens)" in app_js
+    assert "function joinDisplayTokens(tokens, preserveDecodedSpacing = true)" in app_js
+    assert 'tokens.join("")' in app_js
+    assert 'tokens.join(" ")' in app_js
+    assert 'currentTrace.mode === "hf-live-trace"' in app_js
+
+
+def test_web_app_does_not_replace_custom_prompt_on_hf_fallback() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    fallback_body = app_js.split("function loadFallbackTrace", 1)[1].split("async function startDemo", 1)[0]
+
+    assert "resetPromptToTrace();" not in fallback_body
+    assert "renderPrompt();" in fallback_body
+    assert 'payload.message || "Live generation unavailable — showing prepared trace"' in fallback_body
+
+
 def test_web_app_allows_prompt_editing_for_available_hf_trace_runtimes() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 

@@ -175,8 +175,8 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     timeout_seconds=state.config.hf_trace_timeout_seconds,
                 )
                 validate_trace_payload(hf_trace)
-            except AdapterError:
-                self._send_json(_scripted_fallback_payload(runtime_id, trace))
+            except AdapterError as error:
+                self._send_json(_scripted_fallback_payload(runtime_id, trace, reason=str(error)))
                 return
 
             self._send_json(
@@ -225,12 +225,15 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def _scripted_fallback_payload(runtime_id: str, trace) -> dict:
+def _scripted_fallback_payload(runtime_id: str, trace, *, reason: str | None = None) -> dict:
+    message = "Live generation unavailable"
+    if reason:
+        message = f"{message}: {reason}"
     return {
         "mode": "scripted-fallback",
         "runtime_id": runtime_id,
         "fallback_used": True,
-        "message": "Live generation unavailable",
+        "message": message,
         "trace": trace.to_dict(),
     }
 

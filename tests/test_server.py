@@ -287,6 +287,7 @@ def test_hf_trace_error_uses_scripted_fallback() -> None:
     assert payload["mode"] == "scripted-fallback"
     assert payload["runtime_id"] == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct"
     assert payload["fallback_used"]
+    assert payload["message"] == "Live generation unavailable: boom"
     assert payload["trace"]["id"] == "robot-university"
 
 
