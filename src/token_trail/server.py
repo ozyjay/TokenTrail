@@ -262,7 +262,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         if runtime.backend == "hf-trace" and runtime.available and runtime.model:
             try:
                 hf_trace = state.hf_trace_adapter.generate_trace(
-                    prompt=trace.prompt,
+                    prompt=live_prompt,
                     model=runtime.model,
                     max_new_tokens=state.config.hf_trace_max_new_tokens,
                     top_k=state.config.hf_trace_top_k,

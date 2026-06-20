@@ -164,11 +164,11 @@ function simpleTokenise(text) {
 }
 
 function canEditPrompt() {
-  return currentRuntime && currentRuntime.backend === "ollama" && currentRuntime.available;
+  return currentRuntime && currentRuntime.backend !== "scripted" && currentRuntime.available;
 }
 
 function resetPromptToTrace() {
-  const trace = selectedTrace || currentTrace;
+  const trace = currentTrace || selectedTrace;
   if (!trace) {
     return;
   }
@@ -178,7 +178,7 @@ function resetPromptToTrace() {
 }
 
 function renderPrompt() {
-  const trace = selectedTrace || currentTrace;
+  const trace = currentTrace || selectedTrace;
   if (!trace) {
     return;
   }
@@ -186,7 +186,8 @@ function renderPrompt() {
   if (canEditPrompt()) {
     promptText.hidden = true;
     promptInput.hidden = false;
-    renderTokens(promptTokens, simpleTokenise(promptInput.value));
+    const visibleTokens = promptInput.value === trace.prompt ? trace.prompt_tokens : simpleTokenise(promptInput.value);
+    renderTokens(promptTokens, visibleTokens);
     return;
   }
 

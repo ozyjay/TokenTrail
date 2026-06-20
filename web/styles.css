@@ -19,9 +19,9 @@ body {
 }
 
 .shell {
-  width: min(1280px, 96vw);
+  width: min(1680px, 98vw);
   margin: 0 auto;
-  padding: 2rem;
+  padding: clamp(1rem, 2vw, 2rem);
 }
 
 .hero {
@@ -172,7 +172,7 @@ button:disabled {
 
 .grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(20rem, 0.9fr) repeat(2, minmax(0, 1fr));
   gap: 1rem;
 }
 
@@ -240,6 +240,9 @@ button:disabled {
 }
 
 .generated-panel {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
   min-height: 24rem;
 }
 
@@ -252,13 +255,15 @@ button:disabled {
 }
 
 .generated-text--live {
+  flex: 1;
   min-height: 0;
-  max-width: 68ch;
+  max-width: none;
   font-size: clamp(1.35rem, 1.8vw, 2rem);
   line-height: 1.32;
   font-weight: 750;
   white-space: pre-line;
   overflow-wrap: anywhere;
+  overflow: auto;
 }
 
 .generated-text--live-long {
@@ -286,6 +291,10 @@ button:disabled {
 @media (max-width: 800px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .generated-panel {
+    grid-column: auto;
   }
 
   .candidate {

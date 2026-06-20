@@ -250,7 +250,7 @@ def test_generate_trace_returns_live_response() -> None:
     ]
 
 
-def test_generate_trace_returns_hf_live_trace_response_using_curated_prompt() -> None:
+def test_generate_trace_returns_hf_live_trace_response_using_custom_prompt() -> None:
     server = import_server_module()
     hf_adapter = FakeHfTraceAdapter()
     state = server.build_server_state(
@@ -268,7 +268,7 @@ def test_generate_trace_returns_hf_live_trace_response_using_curated_prompt() ->
             {
                 "runtime_id": "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
                 "trace_id": "robot-university",
-                "prompt": "This visitor prompt must not be used.",
+                "prompt": "  Explain tokenisation with a tiny campus story.  ",
             },
         )
     finally:
@@ -283,7 +283,7 @@ def test_generate_trace_returns_hf_live_trace_response_using_curated_prompt() ->
     assert payload["trace"]["steps"][0]["selected_token"] == "A"
     assert hf_adapter.generate_calls == [
         {
-            "prompt": "Write a short story about a robot at university.",
+            "prompt": "Explain tokenisation with a tiny campus story.",
             "model": "Qwen/Qwen2.5-1.5B-Instruct",
             "max_new_tokens": 48,
             "top_k": 5,
