@@ -117,3 +117,34 @@ def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
         assert "python3 -m pip install torch transformers" in str(error)
     else:
         raise AssertionError("expected ProbeError")
+
+
+def test_generated_text_from_trace_joins_selected_tokens() -> None:
+    probe = load_probe_module()
+    trace = {
+        "steps": [
+            {"selected_token": "A"},
+            {"selected_token": " robot"},
+            {"selected_token": " studied"},
+            {"selected_token": "."},
+        ]
+    }
+
+    assert probe.generated_text_from_trace(trace) == "A robot studied."
+
+
+def test_format_step_preview_includes_candidates() -> None:
+    probe = load_probe_module()
+    trace = {
+        "steps": [
+            {
+                "selected_token": "A",
+                "candidates": [
+                    {"token": "A", "probability": 0.42},
+                    {"token": "The", "probability": 0.31},
+                ],
+            }
+        ]
+    }
+
+    assert probe.format_step_preview(trace) == ["1. selected='A' candidates='A' 0.420, 'The' 0.310"]

@@ -313,10 +313,31 @@ def print_summary(*, trace: dict[str, Any], elapsed_seconds: float) -> None:
     print(f"prompt tokens: {len(trace.get('prompt_tokens', []))}")
     print(f"generation steps: {len(trace.get('steps', []))}")
     print(f"elapsed seconds: {elapsed_seconds:.2f}")
+    print()
+    print("First generated steps:")
+    previews = format_step_preview(trace)
+    if previews:
+        for line in previews:
+            print(line)
+    else:
+        print("No generated steps returned.")
 
 
 def generated_text_from_trace(trace: dict[str, Any]) -> str:
-    return "".join(str(step.get("selected_token", "")) for step in trace.get("steps", []))
+    text = "".join(str(step.get("selected_token", "")) for step in trace.get("steps", []))
+    return text.replace(" .", ".").replace(" ,", ",").replace(" :", ":").strip()
+
+
+def format_step_preview(trace: dict[str, Any], limit: int = 5) -> list[str]:
+    previews: list[str] = []
+    for index, step in enumerate(trace.get("steps", [])[:limit], start=1):
+        candidates = []
+        for candidate in step.get("candidates", [])[:5]:
+            token = str(candidate.get("token", ""))
+            probability = float(candidate.get("probability", 0))
+            candidates.append(f"{token!r} {probability:.3f}")
+        previews.append(f"{index}. selected={step.get('selected_token', '')!r} candidates={', '.join(candidates)}")
+    return previews
 
 
 if __name__ == "__main__":
