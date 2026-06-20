@@ -78,7 +78,7 @@ Done.
 - Python 3.12 target.
 - Fixed local service ports.
 - `.env.example` configuration.
-- PowerShell and shell scripts.
+- PowerShell scripts.
 - Port preflight checks.
 - Tests and project setup checks.
 

@@ -11,7 +11,7 @@ The project uses Poetry and Python 3.12. The current MVP does not require a mode
 | Machine | Recommended mode | Notes |
 |---|---|---|
 | Personal Windows machine | Scripted mode | Use PowerShell scripts. No model server required. |
-| Personal macOS/Linux machine | Scripted mode | Use shell scripts. No model server required. |
+| Personal macOS/Linux machine | Scripted mode | Use PowerShell 7 scripts. No model server required. |
 | Framework Desktop development | Scripted + Ollama mode | Use pyenv, Poetry, and Ollama for local SLM testing. |
 | Framework Desktop Open Day | Scripted fallback + one approved live backend | Prefer one live backend during the event to reduce operational risk. |
 
@@ -31,7 +31,7 @@ python --version
 
 ---
 
-## Windows setup
+## PowerShell setup
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
@@ -54,7 +54,7 @@ http://127.0.0.1:3100/health
 
 ---
 
-## Linux / Ubuntu setup
+## Linux / Ubuntu setup notes
 
 Ubuntu 22.04 or 24.04 should both be suitable for the scripted MVP.
 
@@ -65,16 +65,7 @@ sudo apt update
 sudo apt install -y git curl build-essential python3.12 python3.12-venv
 ```
 
-Install Poetry using the official installer or your preferred package manager.
-
-Then run:
-
-```bash
-bash ./scripts/setup.sh
-bash ./scripts/test.sh
-bash ./scripts/check_ports.sh
-bash ./scripts/run.sh
-```
+Install PowerShell 7 and Poetry using the official installers or your preferred package manager, then use the PowerShell setup commands above.
 
 Open:
 
@@ -96,8 +87,8 @@ The default setup installs only the dependencies needed for scripted mode, tests
 
 Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path. The wrapper installs the optional group before running the probe:
 
-```bash
-bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
 ```
 
 Manual equivalent:

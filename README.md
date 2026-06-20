@@ -22,7 +22,7 @@ The current app:
 - can optionally use a local Ollama model for short live text generation;
 - keeps scripted fallback prompts curated and static;
 - includes tests for traces, config, docs, adapters, server routes, and project setup;
-- supports Windows PowerShell scripts and Linux/macOS shell scripts.
+- uses PowerShell scripts for local setup, testing, port checks, and launch.
 
 Scripted mode remains the guaranteed fallback for Open Day.
 
@@ -64,10 +64,10 @@ docs/
   OLLAMA_WARMUP_PLAN.md
   STAFF_READINESS_CHECKLIST.md
 scripts/
-  setup.ps1 / setup.sh
-  test.ps1 / test.sh
-  check_ports.ps1 / check_ports.sh
-  run.ps1 / run.sh
+  setup.ps1
+  test.ps1
+  check_ports.ps1
+  run.ps1
 tests/
 ```
 
@@ -77,7 +77,7 @@ tests/
 
 - Python 3.12
 - Poetry
-- PowerShell on Windows, or Bash on Linux/macOS
+- PowerShell 7+
 - Optional: Ollama for local live text generation
 - Planned only: Hugging Face Transformers/PyTorch for future live trace server
 
@@ -108,22 +108,13 @@ Do not change ports randomly for rehearsal or Open Day. If a required port is oc
 
 ## Useful commands
 
-### Windows
+### Local setup and run
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/test.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check_ports.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
-```
-
-### Linux / macOS
-
-```bash
-bash ./scripts/setup.sh
-bash ./scripts/test.sh
-bash ./scripts/check_ports.sh
-bash ./scripts/run.sh
 ```
 
 Then open:
@@ -136,8 +127,8 @@ http://127.0.0.1:3100
 
 The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight. The wrapper installs that group before running the probe:
 
-```bash
-bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
 ```
 
 If you prefer to install the optional group separately:

@@ -164,8 +164,8 @@ TOKEN_TRAIL_VLLM_MODELS=Qwen/Qwen3-4B
 
 **Run a compact human-readable probe:**
 
-```bash
-bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
 ```
 
 The wrapper installs optional probe dependencies through Poetry:
@@ -176,8 +176,8 @@ poetry install --with hf-trace
 
 **Run JSON mode for contract inspection:**
 
-```bash
-bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
 ```
 
 **Pass condition:** generated text appears, generation steps are non-empty, each step has candidate alternatives, elapsed time is acceptable for rehearsal, and the script exits with status `0`.

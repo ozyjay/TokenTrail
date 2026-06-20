@@ -27,15 +27,13 @@ def test_python_version_matches_voicechanger_baseline() -> None:
 
 def test_run_scripts_delegate_host_and_port_config_to_python() -> None:
     powershell_script = (PROJECT_ROOT / "scripts/run.ps1").read_text(encoding="utf-8")
-    bash_script = (PROJECT_ROOT / "scripts/run.sh").read_text(encoding="utf-8")
 
-    for script in (powershell_script, bash_script):
-        assert "token_trail.ports" in script
-        assert "token_trail.server" in script
-        assert "--host" not in script
-        assert "--port" not in script
-        assert "TOKEN_TRAIL_HOST" not in script
-        assert "TOKEN_TRAIL_PORT" not in script
+    assert "token_trail.ports" in powershell_script
+    assert "token_trail.server" in powershell_script
+    assert "--host" not in powershell_script
+    assert "--port" not in powershell_script
+    assert "TOKEN_TRAIL_HOST" not in powershell_script
+    assert "TOKEN_TRAIL_PORT" not in powershell_script
 
 
 def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:
@@ -47,9 +45,9 @@ def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:
     assert set(hf_trace_group["dependencies"]) == {"torch", "transformers", "accelerate"}
 
 
-def test_hf_trace_probe_shell_script_installs_optional_group_and_forwards_args() -> None:
-    script = (PROJECT_ROOT / "scripts/probe_hf_trace.sh").read_text(encoding="utf-8")
+def test_hf_trace_probe_powershell_script_installs_optional_group_and_forwards_args() -> None:
+    script = (PROJECT_ROOT / "scripts/probe_hf_trace.ps1").read_text(encoding="utf-8")
 
     assert "poetry install --with hf-trace" in script
-    assert "PYTHONPATH=src poetry run python scripts/probe_hf_trace.py" in script
-    assert '"$@"' in script
+    assert "$env:PYTHONPATH = \"src\"" in script
+    assert "poetry run python scripts/probe_hf_trace.py @args" in script
