@@ -12,5 +12,13 @@ package-mode = false
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
 
+[tool.poetry.group.hf-trace]
+optional = true
+
+[tool.poetry.group.hf-trace.dependencies]
+torch = "*"
+transformers = "*"
+accelerate = "*"
+
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

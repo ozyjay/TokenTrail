@@ -31,4 +31,5 @@ def test_local_test_notes_document_hf_trace_probe() -> None:
     notes = (PROJECT_ROOT / "docs/LOCAL_TEST_NOTES.md").read_text(encoding="utf-8")
 
     assert "HF trace CLI probe" in notes
-    assert "python3 scripts/probe_hf_trace.py" in notes
+    assert "poetry install --with hf-trace" in notes
+    assert "poetry run python scripts/probe_hf_trace.py" in notes

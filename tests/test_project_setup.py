@@ -1,3 +1,4 @@
+import tomllib
 from pathlib import Path
 
 
@@ -35,3 +36,12 @@ def test_run_scripts_delegate_host_and_port_config_to_python() -> None:
         assert "--port" not in script
         assert "TOKEN_TRAIL_HOST" not in script
         assert "TOKEN_TRAIL_PORT" not in script
+
+
+def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:
+    pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    hf_trace_group = pyproject["tool"]["poetry"]["group"]["hf-trace"]
+
+    assert hf_trace_group["optional"] is True
+    assert set(hf_trace_group["dependencies"]) == {"torch", "transformers", "accelerate"}
