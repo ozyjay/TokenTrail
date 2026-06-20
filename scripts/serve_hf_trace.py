@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import parse_qs, urlparse
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +108,9 @@ class TransformersTraceRunner:
 
         return self._models[model_name]
 
+    def is_model_loaded(self, model: str) -> bool:
+        return model in self._models
+
 
 @dataclass
 class HfTraceServerState:
@@ -123,8 +127,15 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
     server_version = "TokenTrailHfTrace/0.1"
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
-        if self.path == "/health":
-            self._send_json({"status": "ok", "service": "token-trail-hf-trace"})
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
+            payload: dict[str, Any] = {"status": "ok", "service": "token-trail-hf-trace"}
+            model = parse_qs(parsed.query).get("model", [""])[0]
+            if model:
+                is_loaded = getattr(self.server.state.trace_runner, "is_model_loaded", lambda value: False)
+                payload["model"] = model
+                payload["model_loaded"] = bool(is_loaded(model))
+            self._send_json(payload)
             return
         self._send_json({"error": "Not found"}, status=404)
 

@@ -26,7 +26,13 @@ def test_build_runtime_options_includes_only_scripted_by_default() -> None:
 
 
 def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
-    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=True)
+    options = build_runtime_options(
+        make_config(hf_trace_enabled=True),
+        hf_trace_statuses={
+            "Qwen/Qwen2.5-1.5B-Instruct": {"available": True, "model_loaded": True},
+            "Qwen/Qwen2.5-0.5B-Instruct": {"available": True, "model_loaded": False},
+        },
+    )
 
     assert [option.id for option in options] == [
         "scripted:prepared-traces",
@@ -35,6 +41,9 @@ def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
     ]
     assert [option.backend for option in options] == ["scripted", "hf-trace", "hf-trace"]
     assert [option.available for option in options] == [True, True, True]
+    assert [option.status for option in options] == ["ready", "ready", "running"]
+    assert options[1].notes == "HF trace server is running and this model is ready."
+    assert options[2].notes == "HF trace server is running; this model loads on first use."
 
 
 def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:
@@ -42,6 +51,7 @@ def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:
     hf_option = next(option for option in options if option.backend == "hf-trace")
 
     assert not hf_option.available
+    assert hf_option.status == "unavailable"
     assert hf_option.notes == "Configured HF trace server is unavailable; scripted fallback remains available."
 
 

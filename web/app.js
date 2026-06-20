@@ -34,8 +34,8 @@ async function loadRuntimeOptions() {
       const item = document.createElement("option");
       item.value = option.id;
       item.textContent = option.label;
-      if (!option.available && option.backend !== "scripted") {
-        item.textContent += " (unavailable)";
+      if (option.backend !== "scripted") {
+        item.textContent += ` (${runtimeStatusLabel(option)})`;
       }
       return item;
     }),
@@ -64,13 +64,29 @@ async function selectRuntime() {
 }
 
 function renderRuntimeStatus(runtime) {
-  const suffix = runtime.available ? "ready" : "unavailable";
+  const suffix = runtimeStatusLabel(runtime);
   runtimeSelect.title = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}. ${runtime.notes}`;
   runtimeSelect.setAttribute("aria-label", `Runtime: ${runtime.label}, ${suffix}`);
   updatePlayButton();
 }
 
+function runtimeStatusLabel(option) {
+  switch (option.status) {
+    case "ready":
+      return "ready";
+    case "running":
+      return "loads on first use";
+    case "unavailable":
+      return "unavailable";
+    default:
+      return option.available ? "ready" : "unavailable";
+  }
+}
+
 function updatePlayButton() {
+  if (timer) {
+    return;
+  }
   playButton.textContent = buttonLabelForRuntime();
   playButton.disabled = false;
 }
@@ -239,6 +255,9 @@ function showHfLiveTrace(payload) {
   resetPromptToTrace();
   runNotice = "HF live trace — top returned alternatives from the local model";
   explanation.textContent = runNotice;
+  loadRuntimeOptions().catch((error) => {
+    explanation.textContent = `Could not refresh runtime status: ${error}`;
+  });
   startPreparedTrail();
 }
 
@@ -248,6 +267,9 @@ function loadFallbackTrace(payload) {
   renderPrompt();
   runNotice = payload.message || "Live generation unavailable — showing prepared trace";
   explanation.textContent = runNotice;
+  loadRuntimeOptions().catch((error) => {
+    explanation.textContent = `Could not refresh runtime status: ${error}`;
+  });
   startPreparedTrail();
 }
 

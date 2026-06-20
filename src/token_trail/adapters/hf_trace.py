@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import quote, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 from token_trail.adapters.base import AdapterError
@@ -20,6 +20,7 @@ class HfTraceStatus:
     """Reachability summary for the optional HF trace server."""
 
     available: bool
+    model_loaded: bool = False
     error: str | None = None
 
 
@@ -34,11 +35,13 @@ class HfTraceAdapter:
         """Return true when the HF trace server health endpoint is reachable."""
 
         timeout_seconds = float(kwargs.get("timeout_seconds") or 2.0)
-        request = Request(_health_url_for_trace_url(self.trace_url), method="GET")
+        model = kwargs.get("model")
+        request = Request(_health_url_for_trace_url(self.trace_url, model=model if isinstance(model, str) else None), method="GET")
         try:
             with self._opener(request, timeout=timeout_seconds) as response:
                 if not 200 <= int(response.status) < 300:
                     return HfTraceStatus(available=False, error=f"HF trace health returned HTTP {response.status}")
+                raw_body = response.read()
         except AdapterError as error:
             if _is_incomplete_trace_error(str(error)):
                 return HfTraceStatus(available=True)
@@ -46,7 +49,15 @@ class HfTraceAdapter:
         except (HTTPError, URLError, TimeoutError, OSError) as error:
             return HfTraceStatus(available=False, error=str(error))
 
-        return HfTraceStatus(available=True)
+        model_loaded = False
+        try:
+            payload = json.loads(raw_body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict):
+            model_loaded = bool(payload.get("model_loaded"))
+
+        return HfTraceStatus(available=True, model_loaded=model_loaded)
 
     def generate_trace(
         self,
@@ -154,6 +165,7 @@ def _is_incomplete_trace_error(message: str) -> bool:
     return "complete sentence" in message
 
 
-def _health_url_for_trace_url(trace_url: str) -> str:
+def _health_url_for_trace_url(trace_url: str, *, model: str | None = None) -> str:
     parsed = urlparse(trace_url)
-    return urlunparse((parsed.scheme or "http", parsed.netloc, "/health", "", "", ""))
+    query = f"model={quote(model, safe='')}" if model else ""
+    return urlunparse((parsed.scheme or "http", parsed.netloc, "/health", "", query, ""))

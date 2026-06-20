@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Mapping
 
 from token_trail.config import RuntimeConfig
 
@@ -16,6 +17,7 @@ class RuntimeOption:
     backend: str
     model: str | None
     available: bool
+    status: str
     notes: str
 
     def to_dict(self) -> dict:
@@ -37,7 +39,11 @@ class RuntimeState:
         }
 
 
-def build_runtime_options(config: RuntimeConfig, hf_trace_available: bool = False) -> list[RuntimeOption]:
+def build_runtime_options(
+    config: RuntimeConfig,
+    hf_trace_available: bool = False,
+    hf_trace_statuses: Mapping[str, Mapping[str, bool]] | None = None,
+) -> list[RuntimeOption]:
     """Build selectable runtime options from config."""
 
     options = [
@@ -47,24 +53,33 @@ def build_runtime_options(config: RuntimeConfig, hf_trace_available: bool = Fals
             backend="scripted",
             model=None,
             available=True,
+            status="ready",
             notes="Guaranteed local fallback; no model server required.",
         )
     ]
 
     if config.hf_trace_enabled:
-        notes = (
-            "Configured HF trace server is reachable."
-            if hf_trace_available
-            else "Configured HF trace server is unavailable; scripted fallback remains available."
-        )
         for model in config.hf_trace_models:
+            status_payload = (hf_trace_statuses or {}).get(model, {})
+            model_available = bool(status_payload.get("available", hf_trace_available))
+            model_loaded = bool(status_payload.get("model_loaded", False))
+            if not model_available:
+                status = "unavailable"
+                notes = "Configured HF trace server is unavailable; scripted fallback remains available."
+            elif model_loaded:
+                status = "ready"
+                notes = "HF trace server is running and this model is ready."
+            else:
+                status = "running"
+                notes = "HF trace server is running; this model loads on first use."
             options.append(
                 RuntimeOption(
                     id=f"hf-trace:{model}",
                     label=f"HF trace · {model}",
                     backend="hf-trace",
                     model=model,
-                    available=hf_trace_available,
+                    available=model_available,
+                    status=status,
                     notes=notes,
                 )
             )

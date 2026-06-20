@@ -47,18 +47,9 @@ def build_server_state(
     """Build runtime state at startup without doing work at import time."""
 
     trace_adapter = hf_trace_adapter or HfTraceAdapter(config.hf_trace_url)
-    hf_trace_status = (
-        trace_adapter.status(
-            model=config.hf_trace_model,
-            max_new_tokens=1,
-            top_k=1,
-            temperature=0,
-            timeout_seconds=min(config.hf_trace_timeout_seconds, 2.0),
-        )
-        if config.hf_trace_enabled
-        else HfTraceStatus(available=False)
-    )
-    runtime_options = build_runtime_options(config, hf_trace_available=hf_trace_status.available)
+    hf_trace_statuses = _hf_trace_statuses(config, trace_adapter)
+    hf_trace_status = hf_trace_statuses.get(config.hf_trace_model, HfTraceStatus(available=False))
+    runtime_options = build_runtime_options(config, hf_trace_statuses=_runtime_status_payload(hf_trace_statuses))
     runtime_state = RuntimeState(selected_id=default_runtime_id(config, runtime_options))
     return ServerState(
         config=config,
@@ -88,6 +79,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/runtime":
             state = self._state
+            _refresh_runtime_options(state)
             self._send_json(state.runtime_state.to_dict(state.runtime_options))
             return
 
@@ -236,6 +228,35 @@ def _scripted_fallback_payload(runtime_id: str, trace, *, reason: str | None = N
         "message": message,
         "trace": trace.to_dict(),
     }
+
+
+def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[str, HfTraceStatus]:
+    if not config.hf_trace_enabled:
+        return {}
+
+    statuses: dict[str, HfTraceStatus] = {}
+    for model in config.hf_trace_models:
+        statuses[model] = adapter.status(
+            model=model,
+            max_new_tokens=1,
+            top_k=1,
+            temperature=0,
+            timeout_seconds=min(config.hf_trace_timeout_seconds, 2.0),
+        )
+    return statuses
+
+
+def _runtime_status_payload(statuses: dict[str, HfTraceStatus]) -> dict[str, dict[str, bool]]:
+    return {
+        model: {"available": status.available, "model_loaded": status.model_loaded}
+        for model, status in statuses.items()
+    }
+
+
+def _refresh_runtime_options(state: ServerState) -> None:
+    statuses = _hf_trace_statuses(state.config, state.hf_trace_adapter)
+    state.hf_trace_status = statuses.get(state.config.hf_trace_model, HfTraceStatus(available=False))
+    state.runtime_options = build_runtime_options(state.config, hf_trace_statuses=_runtime_status_payload(statuses))
 
 
 def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:

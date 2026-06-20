@@ -23,9 +23,11 @@ def load_server_module():
 class FakeTraceRunner:
     def __init__(self) -> None:
         self.calls = []
+        self.loaded_models = set()
 
     def generate_trace(self, **kwargs):
         self.calls.append(kwargs)
+        self.loaded_models.add(kwargs["model"])
         return {
             "mode": "hf-live-trace",
             "model": kwargs["model"],
@@ -39,6 +41,9 @@ class FakeTraceRunner:
                 }
             ],
         }
+
+    def is_model_loaded(self, model: str) -> bool:
+        return model in self.loaded_models
 
 
 def post_json(url: str, payload: dict) -> dict:
@@ -87,6 +92,34 @@ def test_hf_trace_server_returns_trace_payload() -> None:
             "temperature": 0.2,
         }
     ]
+
+
+def test_hf_trace_health_reports_model_warm_status() -> None:
+    server = load_server_module()
+    runner = FakeTraceRunner()
+    runner.loaded_models.add("Qwen/Qwen2.5-0.5B-Instruct")
+    httpd = server.create_server(("127.0.0.1", 0), trace_runner=runner)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urlopen(
+            f"http://127.0.0.1:{httpd.server_port}/health?model=Qwen/Qwen2.5-0.5B-Instruct",
+            timeout=5,
+        ) as response:
+            warm_payload = json.loads(response.read().decode("utf-8"))
+        with urlopen(
+            f"http://127.0.0.1:{httpd.server_port}/health?model=Qwen/Qwen2.5-1.5B-Instruct",
+            timeout=5,
+        ) as response:
+            cold_payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert warm_payload["model_loaded"] is True
+    assert cold_payload["model_loaded"] is False
 
 
 def test_hf_trace_server_rejects_bad_requests() -> None:

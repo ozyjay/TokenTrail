@@ -79,6 +79,18 @@ def test_runtime_status_is_not_repeated_as_a_visible_pill() -> None:
     assert "runtimeSelect.setAttribute(\"aria-label\"" in app_js
 
 
+def test_runtime_selector_labels_hf_warm_status() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert 'runtimeStatusLabel(option)' in app_js
+    assert 'case "ready":' in app_js
+    assert 'return "ready";' in app_js
+    assert 'case "running":' in app_js
+    assert 'return "loads on first use";' in app_js
+    assert 'case "unavailable":' in app_js
+    assert 'return "unavailable";' in app_js
+
+
 def test_web_app_has_trail_speed_control() -> None:
     index_html = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
 

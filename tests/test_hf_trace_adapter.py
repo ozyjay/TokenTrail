@@ -36,7 +36,7 @@ def test_status_uses_health_endpoint_without_generating_trace() -> None:
 
     def opener(request, timeout):
         calls.append((request.full_url, request.get_method(), timeout))
-        return FakeResponse(status=200, body={"status": "ok"})
+        return FakeResponse(status=200, body={"status": "ok", "model_loaded": True})
 
     status = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).status(
         model="Qwen/Qwen2.5-0.5B-Instruct",
@@ -47,7 +47,8 @@ def test_status_uses_health_endpoint_without_generating_trace() -> None:
     )
 
     assert status.available
-    assert calls == [("http://127.0.0.1:8600/health", "GET", 2.0)]
+    assert status.model_loaded
+    assert calls == [("http://127.0.0.1:8600/health?model=Qwen%2FQwen2.5-0.5B-Instruct", "GET", 2.0)]
 
 
 def test_status_reports_unavailable_when_health_endpoint_fails() -> None:
