@@ -35,6 +35,7 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
         "TOKEN_TRAIL_HF_TRACE_ENABLED",
         "TOKEN_TRAIL_HF_TRACE_URL",
         "TOKEN_TRAIL_HF_TRACE_MODEL",
+        "TOKEN_TRAIL_HF_TRACE_MODELS",
         "TOKEN_TRAIL_HF_TRACE_TOP_K",
         "TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS",
         "TOKEN_TRAIL_HF_TRACE_TEMPERATURE",
@@ -64,6 +65,7 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.hf_trace_enabled is False
     assert config.hf_trace_url == "http://127.0.0.1:8600/api/trace"
     assert config.hf_trace_model == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-1.5B-Instruct",)
     assert config.hf_trace_top_k == 5
     assert config.hf_trace_max_new_tokens == 48
     assert config.hf_trace_temperature == 0.3
@@ -86,6 +88,10 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_ENABLED", "true")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_URL", "http://127.0.0.1:8700/api/trace")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+    monkeypatch.setenv(
+        "TOKEN_TRAIL_HF_TRACE_MODELS",
+        "Qwen/Qwen2.5-0.5B-Instruct, Qwen/Qwen2.5-1.5B-Instruct, Qwen/Qwen2.5-0.5B-Instruct",
+    )
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TOP_K", "3")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", "24")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", "0.1")
@@ -108,6 +114,7 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.hf_trace_enabled is True
     assert config.hf_trace_url == "http://127.0.0.1:8700/api/trace"
     assert config.hf_trace_model == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")
     assert config.hf_trace_top_k == 3
     assert config.hf_trace_max_new_tokens == 24
     assert config.hf_trace_temperature == 0.1
@@ -182,3 +189,12 @@ def test_process_environment_overrides_env_file(monkeypatch) -> None:
 
     assert config.port == 9000
     assert config.ollama_keep_alive == "20m"
+
+
+def test_hf_trace_default_model_is_included_in_model_options(monkeypatch) -> None:
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MODELS", "Qwen/Qwen2.5-1.5B-Instruct")
+
+    config = load_config(env_file=None)
+
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")

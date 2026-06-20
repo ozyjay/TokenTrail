@@ -72,3 +72,15 @@ def test_hf_trace_plan_records_cli_probe_result() -> None:
     assert "CLI probe implemented" in plan
     assert "--candidate-source forward-logits" in plan
     assert "generation-scores" in plan
+
+
+def test_hf_trace_model_list_is_documented() -> None:
+    for relative_path in (
+        ".env.example",
+        "README.md",
+        "docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md",
+    ):
+        document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+
+        assert "TOKEN_TRAIL_HF_TRACE_MODEL=" in document
+        assert "TOKEN_TRAIL_HF_TRACE_MODELS=" in document

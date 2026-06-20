@@ -218,11 +218,14 @@ Add these only after the standalone server spike works:
 TOKEN_TRAIL_HF_TRACE_ENABLED=false
 TOKEN_TRAIL_HF_TRACE_URL=http://127.0.0.1:8600/api/trace
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
+TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_TOP_K=5
 TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=48
 TOKEN_TRAIL_HF_TRACE_TEMPERATURE=0.3
 TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS=20
 ```
+
+`TOKEN_TRAIL_HF_TRACE_MODEL` is the initial/default HF trace runtime. `TOKEN_TRAIL_HF_TRACE_MODELS` is the comma-separated list shown in the runtime selector.
 
 HF live trace should be disabled by default until rehearsed on the final machine.
 

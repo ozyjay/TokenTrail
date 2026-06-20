@@ -41,6 +41,7 @@ def make_config(
         hf_trace_enabled=hf_trace_enabled,
         hf_trace_url="http://127.0.0.1:8600/api/trace",
         hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
+        hf_trace_models=("Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"),
         hf_trace_top_k=5,
         hf_trace_max_new_tokens=48,
         hf_trace_temperature=0.3,
@@ -290,6 +291,36 @@ def test_generate_trace_returns_hf_live_trace_response_using_curated_prompt() ->
             "timeout_seconds": 7.5,
         }
     ]
+
+
+def test_generate_trace_uses_selected_hf_trace_model() -> None:
+    server = import_server_module()
+    hf_adapter = FakeHfTraceAdapter()
+    state = server.build_server_state(
+        make_config(backend="hf-trace", hf_trace_enabled=True),
+        ollama_adapter=FakeOllamaAdapter(OllamaStatus(available=False, models=())),
+        hf_trace_adapter=hf_adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/generate-trace",
+            {
+                "runtime_id": "hf-trace:Qwen/Qwen2.5-0.5B-Instruct",
+                "trace_id": "robot-university",
+            },
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload["mode"] == "hf-live-trace"
+    assert payload["runtime_id"] == "hf-trace:Qwen/Qwen2.5-0.5B-Instruct"
+    assert hf_adapter.generate_calls[-1]["model"] == "Qwen/Qwen2.5-0.5B-Instruct"
 
 
 def test_hf_trace_error_uses_scripted_fallback() -> None:

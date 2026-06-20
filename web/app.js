@@ -11,6 +11,7 @@ const generatedText = document.querySelector("#generatedText");
 const explanation = document.querySelector("#explanation");
 
 let currentTrace = null;
+let selectedTrace = null;
 let currentRuntime = null;
 let timer = null;
 let generatedTokens = [];
@@ -55,7 +56,7 @@ async function selectRuntime() {
   }
 
   currentRuntime = payload.selected;
-  resetDemo();
+  resetDemo({ restoreSelectedTrace: true });
   warmupSelectedRuntime();
 }
 
@@ -141,7 +142,8 @@ async function loadTraceList() {
 
 async function loadSelectedTrace() {
   const response = await fetch(`/api/traces/${traceSelect.value}`);
-  currentTrace = await response.json();
+  selectedTrace = await response.json();
+  currentTrace = selectedTrace;
   resetDemo();
   resetPromptToTrace();
 }
@@ -166,16 +168,18 @@ function canEditPrompt() {
 }
 
 function resetPromptToTrace() {
-  if (!currentTrace) {
+  const trace = selectedTrace || currentTrace;
+  if (!trace) {
     return;
   }
 
-  promptInput.value = currentTrace.prompt;
+  promptInput.value = trace.prompt;
   renderPrompt();
 }
 
 function renderPrompt() {
-  if (!currentTrace) {
+  const trace = selectedTrace || currentTrace;
+  if (!trace) {
     return;
   }
 
@@ -188,8 +192,8 @@ function renderPrompt() {
 
   promptInput.hidden = true;
   promptText.hidden = false;
-  promptText.textContent = currentTrace.prompt;
-  renderTokens(promptTokens, currentTrace.prompt_tokens);
+  promptText.textContent = trace.prompt;
+  renderTokens(promptTokens, trace.prompt_tokens);
 }
 
 function renderCandidates(step) {
@@ -297,9 +301,7 @@ function showHfLiveTrace(payload) {
 }
 
 function loadFallbackTrace(payload) {
-  if (payload.trace) {
-    currentTrace = payload.trace;
-  }
+  currentTrace = payload.trace || selectedTrace || currentTrace;
   resetDemo();
   resetPromptToTrace();
   runNotice = "Live generation unavailable — showing prepared trace";
@@ -324,7 +326,7 @@ async function startDemo() {
         loadFallbackTrace(payload);
       }
     } catch (error) {
-      resetDemo();
+      resetDemo({ restoreSelectedTrace: true });
       runNotice = `Live generation unavailable — showing prepared trace (${error})`;
       explanation.textContent = runNotice;
       startPreparedTrail();
@@ -345,9 +347,12 @@ function startPreparedTrail() {
   timer = setInterval(runStep, 1500);
 }
 
-function resetDemo() {
+function resetDemo({ restoreSelectedTrace = false } = {}) {
   clearInterval(timer);
   timer = null;
+  if (restoreSelectedTrace && selectedTrace) {
+    currentTrace = selectedTrace;
+  }
   generatedTokens = [];
   stepIndex = 0;
   runNotice = "";
@@ -378,7 +383,7 @@ promptInput.addEventListener("input", () => {
   }
 });
 playButton.addEventListener("click", startDemo);
-resetButton.addEventListener("click", resetDemo);
+resetButton.addEventListener("click", () => resetDemo({ restoreSelectedTrace: true }));
 
 Promise.all([loadRuntimeOptions(), loadTraceList()]).catch((error) => {
   explanation.textContent = `Could not load demo data: ${error}`;

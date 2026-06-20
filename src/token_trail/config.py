@@ -57,6 +57,7 @@ class RuntimeConfig:
     hf_trace_enabled: bool = False
     hf_trace_url: str = DEFAULT_HF_TRACE_URL
     hf_trace_model: str = DEFAULT_HF_TRACE_MODEL
+    hf_trace_models: tuple[str, ...] = ()
     hf_trace_top_k: int = DEFAULT_HF_TRACE_TOP_K
     hf_trace_max_new_tokens: int = DEFAULT_HF_TRACE_MAX_NEW_TOKENS
     hf_trace_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
@@ -67,6 +68,10 @@ class RuntimeConfig:
             object.__setattr__(self, "ollama_models", (self.ollama_model,))
         if not self.vllm_models:
             object.__setattr__(self, "vllm_models", (self.vllm_model,))
+        if not self.hf_trace_models:
+            object.__setattr__(self, "hf_trace_models", (self.hf_trace_model,))
+        elif self.hf_trace_model not in self.hf_trace_models:
+            object.__setattr__(self, "hf_trace_models", (self.hf_trace_model, *self.hf_trace_models))
         if self.ollama_reasoning_retry_tokens is None:
             object.__setattr__(self, "ollama_reasoning_retry_tokens", dict(DEFAULT_OLLAMA_REASONING_RETRY_TOKENS))
 
@@ -84,6 +89,7 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
 
     ollama_model = get_setting("TOKEN_TRAIL_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)
     vllm_model = get_setting("TOKEN_TRAIL_VLLM_MODEL", DEFAULT_VLLM_MODEL)
+    hf_trace_model = get_setting("TOKEN_TRAIL_HF_TRACE_MODEL", DEFAULT_HF_TRACE_MODEL)
 
     return RuntimeConfig(
         backend=get_setting("TOKEN_TRAIL_BACKEND", "scripted").strip().lower(),
@@ -112,7 +118,8 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
         hf_trace_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_HF_TRACE_ENABLED", "false")),
         hf_trace_url=get_setting("TOKEN_TRAIL_HF_TRACE_URL", DEFAULT_HF_TRACE_URL),
-        hf_trace_model=get_setting("TOKEN_TRAIL_HF_TRACE_MODEL", DEFAULT_HF_TRACE_MODEL),
+        hf_trace_model=hf_trace_model,
+        hf_trace_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_HF_TRACE_MODELS", hf_trace_model)),
         hf_trace_top_k=int(get_setting("TOKEN_TRAIL_HF_TRACE_TOP_K", str(DEFAULT_HF_TRACE_TOP_K))),
         hf_trace_max_new_tokens=int(
             get_setting("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", str(DEFAULT_HF_TRACE_MAX_NEW_TOKENS))

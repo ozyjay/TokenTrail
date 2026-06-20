@@ -174,6 +174,15 @@ TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED=true
 
 HF trace settings should only be added after the standalone HF trace server spike succeeds.
 
+```text
+TOKEN_TRAIL_BACKEND=hf-trace
+TOKEN_TRAIL_HF_TRACE_ENABLED=true
+TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
+TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
+```
+
+`TOKEN_TRAIL_HF_TRACE_MODEL` sets the initial HF trace runtime. `TOKEN_TRAIL_HF_TRACE_MODELS` lists the HF trace models shown in the runtime selector.
+
 ---
 
 ## Public wording

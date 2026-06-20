@@ -106,16 +106,17 @@ def build_runtime_options(
             if hf_trace_available
             else "Configured HF trace server is unavailable; scripted fallback remains available."
         )
-        options.append(
-            RuntimeOption(
-                id=f"hf-trace:{config.hf_trace_model}",
-                label=f"HF trace · {config.hf_trace_model}",
-                backend="hf-trace",
-                model=config.hf_trace_model,
-                available=hf_trace_available,
-                notes=notes,
+        for model in config.hf_trace_models:
+            options.append(
+                RuntimeOption(
+                    id=f"hf-trace:{model}",
+                    label=f"HF trace · {model}",
+                    backend="hf-trace",
+                    model=model,
+                    available=hf_trace_available,
+                    notes=notes,
+                )
             )
-        )
 
     return options
 

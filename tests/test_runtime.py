@@ -18,6 +18,7 @@ def make_config(backend: str = "scripted", *, hf_trace_enabled: bool = False) ->
         hf_trace_enabled=hf_trace_enabled,
         hf_trace_url="http://127.0.0.1:8600/api/trace",
         hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
+        hf_trace_models=("Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"),
         hf_trace_top_k=5,
         hf_trace_max_new_tokens=48,
         hf_trace_temperature=0.3,
@@ -43,11 +44,17 @@ def test_build_runtime_options_includes_available_hf_trace_when_enabled_and_prob
         hf_trace_available=True,
     )
 
-    hf_option = next(option for option in options if option.id == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct")
-    assert hf_option.backend == "hf-trace"
-    assert hf_option.model == "Qwen/Qwen2.5-1.5B-Instruct"
-    assert hf_option.available
-    assert hf_option.notes == "Configured HF trace server is reachable."
+    hf_options = [option for option in options if option.backend == "hf-trace"]
+    assert [option.id for option in hf_options] == [
+        "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
+        "hf-trace:Qwen/Qwen2.5-0.5B-Instruct",
+    ]
+    assert [option.model for option in hf_options] == [
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "Qwen/Qwen2.5-0.5B-Instruct",
+    ]
+    assert all(option.available for option in hf_options)
+    assert {option.notes for option in hf_options} == {"Configured HF trace server is reachable."}
 
 
 def test_build_runtime_options_omits_hf_trace_when_disabled() -> None:
