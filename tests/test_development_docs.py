@@ -19,6 +19,7 @@ def test_cross_platform_scripts_exist() -> None:
 
 def test_environment_docs_exist() -> None:
     for relative_path in (
+        "AGENTS.md",
         ".env.example",
         "docs/DEVELOPMENT_ENVIRONMENTS.md",
         "docs/MODEL_BACKENDS.md",
@@ -52,3 +53,11 @@ def test_main_docs_do_not_reference_shell_scripts() -> None:
         document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
 
         assert ".sh" not in document
+
+
+def test_agents_doc_records_powershell_only_script_policy() -> None:
+    agents = (PROJECT_ROOT / "AGENTS.md").read_text(encoding="utf-8")
+
+    assert "Use PowerShell scripts only" in agents
+    assert "Do not add shell scripts" in agents
+    assert "pwsh -NoProfile -File ./scripts/test.ps1" in agents
