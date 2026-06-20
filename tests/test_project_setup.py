@@ -31,12 +31,19 @@ def test_python_version_matches_voicechanger_baseline() -> None:
 def test_run_scripts_delegate_host_and_port_config_to_python() -> None:
     powershell_script = (PROJECT_ROOT / "scripts/run.ps1").read_text(encoding="utf-8")
 
-    assert "token_trail.ports" in powershell_script
-    assert "token_trail.server" in powershell_script
+    assert "token_trail.local_runner" in powershell_script
     assert "--host" not in powershell_script
     assert "--port" not in powershell_script
     assert "TOKEN_TRAIL_HOST" not in powershell_script
     assert "TOKEN_TRAIL_PORT" not in powershell_script
+
+
+def test_run_script_manages_hf_trace_stack_when_configured() -> None:
+    powershell_script = (PROJECT_ROOT / "scripts/run.ps1").read_text(encoding="utf-8")
+
+    assert "RequiresHfTrace" in powershell_script
+    assert "poetry install --with hf-trace" in powershell_script
+    assert "poetry run python -m token_trail.local_runner" in powershell_script
 
 
 def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:

@@ -133,13 +133,19 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Ins
 
 `--candidate-source forward-logits` is the default and preferred probe mode. It runs a second model pass over the generated sequence so the trace includes useful token alternatives. Use `--candidate-source generation-scores` only when comparing against the raw processed generation scores.
 
-To serve live HF traces for the UI, start the local HF trace server in a separate terminal:
+When `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`, the normal run script starts the HF trace server, warms the configured model, then starts Token Trail:
+
+```powershell
+pwsh -NoProfile -File ./scripts/run.ps1
+```
+
+For manual debugging, the HF trace server can still be started in a separate terminal:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --host 127.0.0.1 --port 8600
 ```
 
-Then start Token Trail with `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. If the server is stopped or fails to return a valid trace, Token Trail keeps using the scripted fallback.
+If the server is stopped or fails to return a valid trace, Token Trail keeps using the scripted fallback.
 
 If you prefer to install the optional group separately:
 

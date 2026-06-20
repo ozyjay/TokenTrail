@@ -182,11 +182,19 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Ins
 
 **Serve traces for Token Trail UI testing:**
 
+The normal local run script manages the HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`:
+
+```powershell
+pwsh -NoProfile -File ./scripts/run.ps1
+```
+
+For manual debugging, run the HF trace server in one terminal and Token Trail in another:
+
 ```powershell
 pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --host 127.0.0.1 --port 8600
 ```
 
-Run the server in one terminal, then run Token Trail in another terminal. The UI marks HF trace runtimes available only after `POST /api/trace` on port `8600` returns a valid non-empty trace.
+The UI marks HF trace runtimes available only after `POST /api/trace` on port `8600` returns a valid non-empty trace.
 
 The probe defaults to `--candidate-source forward-logits`, which runs a second model pass over the generated sequence to produce richer display alternatives. To compare against the original processed generation scores, run:
 
