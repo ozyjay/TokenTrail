@@ -116,3 +116,11 @@ def test_hf_trace_server_rejects_bad_requests() -> None:
 
     assert status == 400
     assert "prompt" in body["error"]
+
+
+def test_hf_trace_server_suppresses_known_resource_tracker_shutdown_warning() -> None:
+    source = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "warnings.filterwarnings" in source
+    assert "leaked semaphore objects" in source
+    assert "multiprocessing.resource_tracker" in source

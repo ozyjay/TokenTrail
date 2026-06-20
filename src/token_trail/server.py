@@ -12,11 +12,10 @@ from urllib.parse import unquote
 
 from token_trail.adapters.base import AdapterError
 from token_trail.adapters.hf_trace import HfTraceAdapter, HfTraceStatus, validate_trace_payload
-from token_trail.adapters.ollama import OllamaAdapter, OllamaStatus
-from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, load_config
-from token_trail.config import RuntimeConfig
+from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config
 from token_trail.runtime import RuntimeOption, RuntimeState, build_runtime_options, default_runtime_id, select_runtime
 from token_trail.traces import get_trace, list_traces
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
@@ -29,8 +28,6 @@ class ServerState:
     config: RuntimeConfig
     runtime_options: list[RuntimeOption]
     runtime_state: RuntimeState
-    ollama_status: OllamaStatus
-    ollama_adapter: OllamaAdapter
     hf_trace_status: HfTraceStatus
     hf_trace_adapter: HfTraceAdapter
 
@@ -45,13 +42,10 @@ class TokenTrailServer(ThreadingHTTPServer):
 
 def build_server_state(
     config: RuntimeConfig,
-    ollama_adapter: OllamaAdapter | None = None,
     hf_trace_adapter: HfTraceAdapter | None = None,
 ) -> ServerState:
     """Build runtime state at startup without doing work at import time."""
 
-    adapter = ollama_adapter or OllamaAdapter(config.ollama_base_url)
-    ollama_status = adapter.status()
     trace_adapter = hf_trace_adapter or HfTraceAdapter(config.hf_trace_url)
     hf_trace_status = (
         trace_adapter.status(
@@ -64,18 +58,12 @@ def build_server_state(
         if config.hf_trace_enabled
         else HfTraceStatus(available=False)
     )
-    runtime_options = build_runtime_options(
-        config,
-        ollama_status=ollama_status,
-        hf_trace_available=hf_trace_status.available,
-    )
+    runtime_options = build_runtime_options(config, hf_trace_available=hf_trace_status.available)
     runtime_state = RuntimeState(selected_id=default_runtime_id(config, runtime_options))
     return ServerState(
         config=config,
         runtime_options=runtime_options,
         runtime_state=runtime_state,
-        ollama_status=ollama_status,
-        ollama_adapter=adapter,
         hf_trace_status=hf_trace_status,
         hf_trace_adapter=trace_adapter,
     )
@@ -94,8 +82,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "service": "token-trail",
                     "runtime": state.runtime_state.selected_id,
-                    "ollama_available": state.ollama_status.available,
-                    "ollama_models": state.ollama_status.models,
                 }
             )
             return
@@ -124,15 +110,11 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             self._select_runtime()
             return
 
-        if self.path == "/api/runtime/warmup":
-            self._warmup_runtime()
-            return
-
         if self.path == "/api/generate-trace":
             self._generate_trace()
             return
 
-        self.send_error(404, "Route not found")
+        self._send_json({"message": "Route not found"}, status=404)
 
     def log_message(self, format: str, *args: object) -> None:
         """Keep console output compact for public-demo use."""
@@ -150,58 +132,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             return
 
         self._send_json(state.runtime_state.to_dict(state.runtime_options))
-
-    def _warmup_runtime(self) -> None:
-        state = self._state
-        try:
-            payload = self._read_json_body()
-            runtime_id = select_runtime(str(payload["runtime_id"]), state.runtime_options)
-        except (KeyError, ValueError, json.JSONDecodeError) as error:
-            self._send_json({"error": str(error)}, status=400)
-            return
-
-        runtime = next(option for option in state.runtime_options if option.id == runtime_id)
-        if runtime.backend == "scripted":
-            self._send_json(
-                {
-                    "status": "skipped",
-                    "runtime_id": runtime_id,
-                    "message": "Scripted runtime does not need warm-up",
-                }
-            )
-            return
-
-        if runtime.backend == "ollama" and runtime.available and runtime.model:
-            if not state.config.ollama_warmup_enabled:
-                self._send_json(
-                    {
-                        "status": "skipped",
-                        "runtime_id": runtime_id,
-                        "message": "Ollama warm-up disabled",
-                    }
-                )
-                return
-
-            try:
-                state.ollama_adapter.warmup(
-                    runtime.model,
-                    timeout_seconds=state.config.ollama_warmup_timeout_seconds,
-                    keep_alive=state.config.ollama_keep_alive,
-                )
-            except AdapterError:
-                self._send_json(_warmup_fallback_payload(runtime_id))
-                return
-
-            self._send_json(
-                {
-                    "status": "ready",
-                    "runtime_id": runtime_id,
-                    "message": "Local model warmed",
-                }
-            )
-            return
-
-        self._send_json(_warmup_fallback_payload(runtime_id))
 
     def _generate_trace(self) -> None:
         state = self._state
@@ -230,31 +160,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     "fallback_used": False,
                     "message": "Prepared Demo Mode",
                     "trace": trace.to_dict(),
-                }
-            )
-            return
-
-        if runtime.backend == "ollama" and runtime.available and runtime.model:
-            try:
-                generated_text = state.ollama_adapter.generate(
-                    runtime.model,
-                    live_prompt,
-                    timeout_seconds=state.config.ollama_timeout_seconds,
-                    max_tokens=state.config.ollama_num_predict,
-                    temperature=state.config.ollama_temperature,
-                    disable_thinking=state.config.ollama_disable_thinking,
-                    reasoning_retry_tokens=state.config.ollama_reasoning_retry_tokens.get(runtime.model),
-                )
-            except AdapterError:
-                self._send_json(_scripted_fallback_payload(runtime_id, trace))
-                return
-
-            self._send_json(
-                {
-                    "mode": "live",
-                    "runtime_id": runtime_id,
-                    "fallback_used": False,
-                    "generated_text": generated_text,
                 }
             )
             return
@@ -341,14 +246,6 @@ def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:
     return prompt[:500]
 
 
-def _warmup_fallback_payload(runtime_id: str) -> dict:
-    return {
-        "status": "fallback",
-        "runtime_id": runtime_id,
-        "message": "Could not warm local model; scripted fallback remains available",
-    }
-
-
 def run_server(
     host: str = "127.0.0.1",
     port: int = DEFAULT_TOKEN_TRAIL_PORT,
@@ -361,10 +258,13 @@ def run_server(
     print(f"Token Trail running at http://{host}:{port}")
     print(f"Health check: http://{host}:{port}/health")
     print(f"Runtime selector: {state.runtime_state.selected_id}")
-    if not state.ollama_status.available and state.config.backend == "ollama":
-        print("Warning: TOKEN_TRAIL_BACKEND=ollama but Ollama is unavailable; scripted fallback remains available.")
     print("Press Ctrl+C to stop.")
-    httpd.serve_forever()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopping Token Trail.")
+    finally:
+        httpd.server_close()
 
 
 def main() -> None:

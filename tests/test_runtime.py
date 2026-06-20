@@ -1,5 +1,4 @@
 from token_trail.config import RuntimeConfig
-from token_trail.adapters.ollama import OllamaStatus
 from token_trail.runtime import build_runtime_options, default_runtime_id, select_runtime
 
 
@@ -9,58 +8,41 @@ def make_config(backend: str = "scripted", *, hf_trace_enabled: bool = False) ->
         host="127.0.0.1",
         port=3100,
         backend_port=8100,
-        ollama_base_url="http://127.0.0.1:11434",
-        ollama_model="qwen3:4b",
-        ollama_models=("qwen3:4b", "qwen3:1.7b"),
-        vllm_base_url="http://127.0.0.1:8000/v1",
-        vllm_model="Qwen/Qwen3-4B",
-        vllm_models=("Qwen/Qwen3-4B",),
         hf_trace_enabled=hf_trace_enabled,
         hf_trace_url="http://127.0.0.1:8600/api/trace",
         hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
         hf_trace_models=("Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"),
         hf_trace_top_k=5,
-        hf_trace_max_new_tokens=48,
+        hf_trace_max_new_tokens=96,
         hf_trace_temperature=0.3,
     )
 
 
-def test_build_runtime_options_includes_scripted_and_configured_models() -> None:
-    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=True, models=("qwen3:4b",)))
+def test_build_runtime_options_includes_only_scripted_by_default() -> None:
+    options = build_runtime_options(make_config())
+
+    assert [option.id for option in options] == ["scripted:prepared-traces"]
+    assert options[0].available
+
+
+def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
+    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=True)
 
     assert [option.id for option in options] == [
         "scripted:prepared-traces",
-        "ollama:qwen3:4b",
-        "ollama:qwen3:1.7b",
-        "vllm:Qwen/Qwen3-4B",
-    ]
-    assert [option.available for option in options] == [True, True, False, False]
-
-
-def test_build_runtime_options_includes_available_hf_trace_when_enabled_and_probed() -> None:
-    options = build_runtime_options(
-        make_config(hf_trace_enabled=True),
-        ollama_status=OllamaStatus(available=False, models=()),
-        hf_trace_available=True,
-    )
-
-    hf_options = [option for option in options if option.backend == "hf-trace"]
-    assert [option.id for option in hf_options] == [
         "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
         "hf-trace:Qwen/Qwen2.5-0.5B-Instruct",
     ]
-    assert [option.model for option in hf_options] == [
-        "Qwen/Qwen2.5-1.5B-Instruct",
-        "Qwen/Qwen2.5-0.5B-Instruct",
-    ]
-    assert all(option.available for option in hf_options)
-    assert {option.notes for option in hf_options} == {"Configured HF trace server is reachable."}
+    assert [option.backend for option in options] == ["scripted", "hf-trace", "hf-trace"]
+    assert [option.available for option in options] == [True, True, True]
 
 
-def test_build_runtime_options_omits_hf_trace_when_disabled() -> None:
-    options = build_runtime_options(make_config(hf_trace_enabled=False), hf_trace_available=True)
+def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:
+    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=False)
+    hf_option = next(option for option in options if option.backend == "hf-trace")
 
-    assert all(option.backend != "hf-trace" for option in options)
+    assert not hf_option.available
+    assert hf_option.notes == "Configured HF trace server is unavailable; scripted fallback remains available."
 
 
 def test_default_runtime_uses_configured_hf_trace_when_available() -> None:
@@ -68,13 +50,6 @@ def test_default_runtime_uses_configured_hf_trace_when_available() -> None:
     options = build_runtime_options(config, hf_trace_available=True)
 
     assert default_runtime_id(config, options) == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct"
-
-
-def test_default_runtime_uses_configured_backend_and_model() -> None:
-    config = make_config(backend="ollama")
-    options = build_runtime_options(config)
-
-    assert default_runtime_id(config, options) == "ollama:qwen3:4b"
 
 
 def test_default_runtime_falls_back_to_scripted_for_unknown_backend() -> None:
@@ -85,22 +60,6 @@ def test_default_runtime_falls_back_to_scripted_for_unknown_backend() -> None:
 
 
 def test_select_runtime_validates_known_ids() -> None:
-    options = build_runtime_options(make_config())
+    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=True)
 
-    assert select_runtime("ollama:qwen3:1.7b", options) == "ollama:qwen3:1.7b"
-
-
-def test_ollama_options_show_missing_model_when_ollama_is_reachable() -> None:
-    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=True, models=("qwen3:4b",)))
-    missing_option = next(option for option in options if option.id == "ollama:qwen3:1.7b")
-
-    assert not missing_option.available
-    assert missing_option.notes == "Configured, but not found in local Ollama."
-
-
-def test_ollama_options_show_unavailable_when_ollama_is_unreachable() -> None:
-    options = build_runtime_options(make_config(), ollama_status=OllamaStatus(available=False, models=(), error="nope"))
-    ollama_option = next(option for option in options if option.id == "ollama:qwen3:4b")
-
-    assert not ollama_option.available
-    assert ollama_option.notes == "Configured local Ollama model, but Ollama is unavailable."
+    assert select_runtime("hf-trace:Qwen/Qwen2.5-0.5B-Instruct", options) == "hf-trace:Qwen/Qwen2.5-0.5B-Instruct"

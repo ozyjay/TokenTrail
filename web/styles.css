@@ -76,6 +76,10 @@ select {
   color: #11182f;
 }
 
+.speed-select {
+  min-width: 9rem;
+}
+
 button {
   cursor: pointer;
   background: #fff;
@@ -90,17 +94,6 @@ button:disabled {
   cursor: wait;
   opacity: 0.62;
   transform: none;
-}
-
-.status-pill {
-  display: inline-flex;
-  align-items: center;
-  min-height: 3rem;
-  border-radius: 999px;
-  padding: 0 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  color: #d7defc;
-  font-weight: 800;
 }
 
 .panel {
@@ -181,30 +174,9 @@ button:disabled {
   gap: 0.8rem;
 }
 
-.live-output-title,
-.live-output-detail {
-  margin: 0;
-  border-radius: 1rem;
-  background: rgba(255, 255, 255, 0.06);
-  color: #f5f7fb;
-}
-
-.live-output-title {
-  padding: 1rem;
-  font-size: 1.6rem;
-  font-weight: 900;
-}
-
-.live-output-detail {
-  padding: 0.9rem 1rem;
-  color: #d7defc;
-  font-size: 1.15rem;
-  line-height: 1.4;
-}
-
 .candidate {
   display: grid;
-  grid-template-columns: 8rem 1fr 4rem;
+  grid-template-columns: minmax(0, 1.1fr) minmax(7rem, 1fr) 4rem;
   gap: 1rem;
   align-items: center;
   padding: 0.9rem;
@@ -212,6 +184,11 @@ button:disabled {
   background: rgba(255, 255, 255, 0.06);
   font-size: 1.5rem;
   font-weight: 800;
+}
+
+.candidate-token {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .candidate.selected {
@@ -244,6 +221,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   min-height: 24rem;
+  max-width: none;
 }
 
 .generated-text {
@@ -252,28 +230,6 @@ button:disabled {
   font-size: clamp(2rem, 4vw, 4rem);
   line-height: 1.15;
   font-weight: 900;
-}
-
-.generated-text--live {
-  flex: 1;
-  min-height: 0;
-  max-width: none;
-  font-size: clamp(1.35rem, 1.8vw, 2rem);
-  line-height: 1.32;
-  font-weight: 750;
-  white-space: pre-line;
-  overflow-wrap: anywhere;
-  overflow: auto;
-}
-
-.generated-text--live-long {
-  font-size: clamp(1.15rem, 1.45vw, 1.55rem);
-  line-height: 1.28;
-}
-
-.generated-text--live-very-long {
-  font-size: clamp(1rem, 1.2vw, 1.25rem);
-  line-height: 1.24;
 }
 
 .explanation {
@@ -298,7 +254,7 @@ button:disabled {
   }
 
   .candidate {
-    grid-template-columns: 6rem 1fr 3.5rem;
+    grid-template-columns: minmax(0, 1fr) minmax(5rem, 1fr) 3.5rem;
     font-size: 1.1rem;
   }
 }

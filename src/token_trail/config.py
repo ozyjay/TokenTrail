@@ -1,13 +1,9 @@
-"""Runtime configuration for Token Trail.
-
-The defaults are intentionally safe for development on personal computers:
-scripted mode, localhost only, and no model server required.
-"""
+"""Runtime configuration for Token Trail."""
 
 from __future__ import annotations
 
-import os
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
@@ -18,18 +14,10 @@ DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 DEFAULT_MODEL_CONFIG_PATH = ""
 DEFAULT_TOKEN_TRAIL_PORT = 3100
 DEFAULT_TOKEN_TRAIL_BACKEND_PORT = 8100
-DEFAULT_OLLAMA_MODEL = "qwen3:4b"
-DEFAULT_VLLM_MODEL = "Qwen/Qwen3-4B"
-DEFAULT_OLLAMA_NUM_PREDICT = 256
-DEFAULT_OLLAMA_TEMPERATURE = 0.4
-DEFAULT_OLLAMA_TIMEOUT_SECONDS = 20.0
-DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS = 45.0
-DEFAULT_OLLAMA_KEEP_ALIVE = "30m"
-DEFAULT_OLLAMA_REASONING_RETRY_TOKENS = (("qwen3:4b", 512),)
 DEFAULT_HF_TRACE_URL = "http://127.0.0.1:8600/api/trace"
 DEFAULT_HF_TRACE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 DEFAULT_HF_TRACE_TOP_K = 5
-DEFAULT_HF_TRACE_MAX_NEW_TOKENS = 48
+DEFAULT_HF_TRACE_MAX_NEW_TOKENS = 96
 DEFAULT_HF_TRACE_TEMPERATURE = 0.3
 DEFAULT_HF_TRACE_TIMEOUT_SECONDS = 20.0
 
@@ -42,21 +30,7 @@ class RuntimeConfig:
     host: str
     port: int
     backend_port: int
-    ollama_base_url: str
-    ollama_model: str
-    vllm_base_url: str
-    vllm_model: str
-    ollama_models: tuple[str, ...] = ()
-    vllm_models: tuple[str, ...] = ()
     model_config_path: str = DEFAULT_MODEL_CONFIG_PATH
-    ollama_num_predict: int = DEFAULT_OLLAMA_NUM_PREDICT
-    ollama_temperature: float = DEFAULT_OLLAMA_TEMPERATURE
-    ollama_timeout_seconds: float = DEFAULT_OLLAMA_TIMEOUT_SECONDS
-    ollama_disable_thinking: bool = True
-    ollama_warmup_enabled: bool = True
-    ollama_warmup_timeout_seconds: float = DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS
-    ollama_keep_alive: str = DEFAULT_OLLAMA_KEEP_ALIVE
-    ollama_reasoning_retry_tokens: dict[str, int] | None = None
     hf_trace_enabled: bool = False
     hf_trace_url: str = DEFAULT_HF_TRACE_URL
     hf_trace_model: str = DEFAULT_HF_TRACE_MODEL
@@ -67,17 +41,10 @@ class RuntimeConfig:
     hf_trace_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
-        if not self.ollama_models:
-            object.__setattr__(self, "ollama_models", (self.ollama_model,))
-        if not self.vllm_models:
-            object.__setattr__(self, "vllm_models", (self.vllm_model,))
         if not self.hf_trace_models:
             object.__setattr__(self, "hf_trace_models", (self.hf_trace_model,))
         elif self.hf_trace_model not in self.hf_trace_models:
             object.__setattr__(self, "hf_trace_models", (self.hf_trace_model, *self.hf_trace_models))
-        if self.ollama_reasoning_retry_tokens is None:
-            object.__setattr__(self, "ollama_reasoning_retry_tokens", dict(DEFAULT_OLLAMA_REASONING_RETRY_TOKENS))
-
 
 
 def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
@@ -96,23 +63,11 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
             return model_default
         return default
 
-    ollama_model = get_setting(
-        "TOKEN_TRAIL_OLLAMA_MODEL",
-        DEFAULT_OLLAMA_MODEL,
-        _model_config_default(model_config, "ollama_model"),
-    )
-    vllm_model = get_setting(
-        "TOKEN_TRAIL_VLLM_MODEL",
-        DEFAULT_VLLM_MODEL,
-        _model_config_default(model_config, "vllm_model"),
-    )
     hf_trace_model = get_setting(
         "TOKEN_TRAIL_HF_TRACE_MODEL",
         DEFAULT_HF_TRACE_MODEL,
         _model_config_default(model_config, "hf_trace_model"),
     )
-    ollama_models = _model_config_models(model_config, "ollama") or (ollama_model,)
-    vllm_models = _model_config_models(model_config, "vllm") or (vllm_model,)
     hf_trace_models = _model_config_models(model_config, "hf_trace") or (hf_trace_model,)
 
     return RuntimeConfig(
@@ -121,26 +76,6 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         port=int(get_setting("TOKEN_TRAIL_PORT", str(DEFAULT_TOKEN_TRAIL_PORT))),
         backend_port=int(get_setting("TOKEN_TRAIL_BACKEND_PORT", str(DEFAULT_TOKEN_TRAIL_BACKEND_PORT))),
         model_config_path=model_config_path,
-        ollama_base_url=get_setting("TOKEN_TRAIL_OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-        ollama_model=ollama_model,
-        ollama_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_OLLAMA_MODELS", ",".join(ollama_models))),
-        ollama_num_predict=int(get_setting("TOKEN_TRAIL_OLLAMA_NUM_PREDICT", str(DEFAULT_OLLAMA_NUM_PREDICT))),
-        ollama_temperature=float(get_setting("TOKEN_TRAIL_OLLAMA_TEMPERATURE", str(DEFAULT_OLLAMA_TEMPERATURE))),
-        ollama_timeout_seconds=float(
-            get_setting("TOKEN_TRAIL_OLLAMA_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_TIMEOUT_SECONDS))
-        ),
-        ollama_disable_thinking=_parse_bool_setting(get_setting("TOKEN_TRAIL_OLLAMA_DISABLE_THINKING", "true")),
-        ollama_warmup_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED", "true")),
-        ollama_warmup_timeout_seconds=float(
-            get_setting("TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS", str(DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS))
-        ),
-        ollama_keep_alive=get_setting("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", DEFAULT_OLLAMA_KEEP_ALIVE),
-        ollama_reasoning_retry_tokens=_parse_model_int_setting(
-            get_setting("TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS", _format_model_int_setting(DEFAULT_OLLAMA_REASONING_RETRY_TOKENS))
-        ),
-        vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
-        vllm_model=vllm_model,
-        vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", ",".join(vllm_models))),
         hf_trace_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_HF_TRACE_ENABLED", "false")),
         hf_trace_url=get_setting("TOKEN_TRAIL_HF_TRACE_URL", DEFAULT_HF_TRACE_URL),
         hf_trace_model=hf_trace_model,
@@ -149,14 +84,11 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         hf_trace_max_new_tokens=int(
             get_setting("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", str(DEFAULT_HF_TRACE_MAX_NEW_TOKENS))
         ),
-        hf_trace_temperature=float(
-            get_setting("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))
-        ),
+        hf_trace_temperature=float(get_setting("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))),
         hf_trace_timeout_seconds=float(
             get_setting("TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_TIMEOUT_SECONDS))
         ),
     )
-
 
 
 def _get_raw_setting(name: str, file_values: Mapping[str, str], default: str) -> str:
@@ -236,43 +168,10 @@ def _parse_csv_setting(value: str) -> tuple[str, ...]:
     return tuple(parsed)
 
 
-
 def _parse_bool_setting(value: str) -> bool:
     """Parse a permissive boolean environment setting."""
 
     return value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _format_model_int_setting(values: tuple[tuple[str, int], ...]) -> str:
-    return ",".join(f"{model}={amount}" for model, amount in values)
-
-
-def _parse_model_int_setting(value: str) -> dict[str, int]:
-    parsed: dict[str, int] = {}
-    for raw_item in value.split(","):
-        item = raw_item.strip()
-        if not item:
-            continue
-
-        if "=" not in item:
-            continue
-
-        model, raw_amount = item.split("=", 1)
-        model = model.strip()
-        raw_amount = raw_amount.strip()
-        if not model or not raw_amount:
-            continue
-
-        try:
-            amount = int(raw_amount)
-        except ValueError:
-            continue
-
-        if amount > 0:
-            parsed[model] = amount
-
-    return parsed
-
 
 
 def _load_env_file(env_file: Path | None) -> Mapping[str, str]:

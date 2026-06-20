@@ -142,6 +142,57 @@ def test_build_trace_payload_matches_token_trail_contract() -> None:
     assert trace["steps"][0]["explanation"] == probe.TRACE_EXPLANATION
 
 
+def test_trim_trace_keeps_first_complete_sentence_after_minimum_steps() -> None:
+    probe = load_probe_module()
+    trace = make_trace(["A", " robot", " studied", " tokens", " in", " the", " lab", ".", " Extra", "."])
+
+    trimmed = probe.trim_trace_to_complete_sentence(trace)
+
+    assert [step["selected_token"] for step in trimmed["steps"]] == [
+        "A",
+        " robot",
+        " studied",
+        " tokens",
+        " in",
+        " the",
+        " lab",
+        ".",
+    ]
+    assert trimmed["steps"][-1]["candidates"] == [{"token": ".", "probability": 1.0}]
+
+
+def test_trim_trace_ignores_sentence_boundary_before_minimum_steps() -> None:
+    probe = load_probe_module()
+    trace = make_trace(["A", " robot", ".", " It", " later", " studied", " tokens", " carefully", "."])
+
+    trimmed = probe.trim_trace_to_complete_sentence(trace)
+
+    assert len(trimmed["steps"]) == 9
+    assert probe.generated_text_from_trace(trimmed) == "A robot. It later studied tokens carefully."
+
+
+def test_trim_trace_accepts_sentence_boundary_before_closing_quote() -> None:
+    probe = load_probe_module()
+    trace = make_trace(["The", " robot", " said", " hello", " to", " the", " room", "!\""])
+
+    trimmed = probe.trim_trace_to_complete_sentence(trace)
+
+    assert len(trimmed["steps"]) == 8
+    assert probe.generated_text_from_trace(trimmed) == 'The robot said hello to the room!"'
+
+
+def test_trim_trace_rejects_incomplete_generation() -> None:
+    probe = load_probe_module()
+    trace = make_trace(["A", " robot", " studied", " tokens", " in", " the", " lab", " with", " care"])
+
+    try:
+        probe.trim_trace_to_complete_sentence(trace)
+    except probe.ProbeError as error:
+        assert "complete sentence" in str(error)
+    else:
+        raise AssertionError("expected ProbeError")
+
+
 def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
     probe = load_probe_module()
     real_import = __import__
@@ -211,3 +262,20 @@ def test_summary_includes_candidate_source(capsys) -> None:
     probe.print_summary(trace=trace, elapsed_seconds=1.25)
 
     assert "candidate source: forward-logits" in capsys.readouterr().out
+
+
+def make_trace(tokens: list[str]) -> dict:
+    return {
+        "mode": "hf-live-trace",
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "prompt": "Write one sentence",
+        "prompt_tokens": ["Write", " one", " sentence"],
+        "steps": [
+            {
+                "selected_token": token,
+                "candidates": [{"token": token, "probability": 1.0}],
+                "explanation": "Top returned alternatives from the local model for this token position.",
+            }
+            for token in tokens
+        ],
+    }

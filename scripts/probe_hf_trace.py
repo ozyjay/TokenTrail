@@ -31,6 +31,7 @@ DEFAULT_TEMPERATURE = 0.3
 TRACE_EXPLANATION = "Top returned alternatives from the local model for this token position."
 CANDIDATE_SOURCE_FORWARD_LOGITS = "forward-logits"
 CANDIDATE_SOURCE_GENERATION_SCORES = "generation-scores"
+MIN_COMPLETE_SENTENCE_STEPS = 8
 
 
 class ProbeError(Exception):
@@ -337,7 +338,29 @@ def build_trace_from_generation(
         candidates_by_step=candidates_by_step,
     )
     trace["candidate_source"] = candidate_source
-    return trace
+    return trim_trace_to_complete_sentence(trace)
+
+
+def trim_trace_to_complete_sentence(trace: dict[str, Any], min_steps: int = MIN_COMPLETE_SENTENCE_STEPS) -> dict[str, Any]:
+    """Keep trace steps through the first complete sentence after a minimum step count."""
+
+    steps = trace.get("steps", [])
+    if not isinstance(steps, list):
+        raise ProbeError("Generated trace did not include a valid steps list")
+
+    for step_count in range(min_steps, len(steps) + 1):
+        candidate = dict(trace)
+        candidate["steps"] = steps[:step_count]
+        if ends_at_sentence_boundary(generated_text_from_trace(candidate)):
+            validate_trace_payload(candidate)
+            return candidate
+
+    raise ProbeError("Generated trace did not reach a complete sentence")
+
+
+def ends_at_sentence_boundary(text: str) -> bool:
+    stripped = text.rstrip().rstrip("\"'”’)]}")
+    return stripped.endswith((".", "!", "?"))
 
 
 def forward_logit_vectors_for_generated_tokens(

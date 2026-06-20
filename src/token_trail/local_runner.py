@@ -143,11 +143,24 @@ def warm_hf_trace_server(config: RuntimeConfig) -> None:
     try:
         with urlopen(request, timeout=HF_TRACE_STARTUP_WARM_TIMEOUT_SECONDS) as response:
             response.read()
-    except (HTTPError, URLError, TimeoutError, OSError) as error:
+    except HTTPError as error:
+        if "complete sentence" in _http_error_body(error):
+            print("HF trace model warmed; readiness trace did not need to be replayable.")
+            return
+        print(f"Warning: could not warm HF trace server; scripted fallback remains available. {error}")
+        return
+    except (URLError, TimeoutError, OSError) as error:
         print(f"Warning: could not warm HF trace server; scripted fallback remains available. {error}")
         return
 
     print("HF trace model warmed.")
+
+
+def _http_error_body(error: HTTPError) -> str:
+    try:
+        return error.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
 
 
 def stop_process(process: subprocess.Popen[Any] | None) -> None:

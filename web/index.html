@@ -20,7 +20,13 @@
 
       <label for="runtimeSelect">Runtime</label>
       <select id="runtimeSelect"></select>
-      <span id="runtimeStatus" class="status-pill">Loading runtime...</span>
+
+      <label for="trailSpeedSelect">Trail speed</label>
+      <select id="trailSpeedSelect" class="speed-select">
+        <option value="slow">Slow</option>
+        <option value="normal" selected>Normal</option>
+        <option value="fast">Fast</option>
+      </select>
 
       <button id="playButton" type="button">Start trail</button>
       <button id="resetButton" type="button">Reset</button>

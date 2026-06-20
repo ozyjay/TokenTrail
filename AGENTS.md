@@ -48,8 +48,14 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 ## Live Runtime UX
 
 - Scripted mode remains the guaranteed fallback and should keep curated prompts static.
-- Available non-scripted runtimes should expose an editable prompt box.
-- Ollama live mode returns paragraph text, not token replay data.
+- Resetting or switching into scripted mode must re-render the curated prompt view, hide the prompt editor, and restore the selected prepared trace.
+- Available HF trace runtimes should expose an editable prompt box.
 - HF trace mode returns replayable `hf-live-trace` data with model-tokenised `prompt_tokens`; after generation, show those returned tokens rather than word-split preview tokens.
+- HF traces should finish at a complete sentence or fall back to scripted mode.
 - The generated output area should use available horizontal browser space and avoid forcing page-level scrolling for normal live output.
 - Do not store visitor prompts or generated responses by default.
+
+## HF Trace Server Shutdown
+
+- `scripts/serve_hf_trace.py` intentionally suppresses Python's known `multiprocessing.resource_tracker` leaked semaphore shutdown warning from the HF/ML stack.
+- Do not broaden that warning filter; real runtime and generation errors should remain visible.

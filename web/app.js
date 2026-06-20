@@ -1,6 +1,6 @@
 const traceSelect = document.querySelector("#traceSelect");
 const runtimeSelect = document.querySelector("#runtimeSelect");
-const runtimeStatus = document.querySelector("#runtimeStatus");
+const trailSpeedSelect = document.querySelector("#trailSpeedSelect");
 const playButton = document.querySelector("#playButton");
 const resetButton = document.querySelector("#resetButton");
 const promptText = document.querySelector("#promptText");
@@ -17,8 +17,12 @@ let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
 let runNotice = "";
-let warmupRequestId = 0;
-let isWarmingRuntime = false;
+
+const TRAIL_SPEED_DELAYS_MS = {
+  slow: 2200,
+  normal: 1500,
+  fast: 700,
+};
 
 async function loadRuntimeOptions() {
   const response = await fetch("/api/runtime");
@@ -40,7 +44,6 @@ async function loadRuntimeOptions() {
   runtimeSelect.value = payload.selected_id;
   renderRuntimeStatus(payload.selected);
   renderPrompt();
-  warmupSelectedRuntime();
 }
 
 async function selectRuntime() {
@@ -57,71 +60,19 @@ async function selectRuntime() {
 
   currentRuntime = payload.selected;
   resetDemo({ restoreSelectedTrace: true });
-  warmupSelectedRuntime();
+  renderRuntimeStatus(payload.selected);
 }
 
 function renderRuntimeStatus(runtime) {
   const suffix = runtime.available ? "ready" : "unavailable";
-  runtimeStatus.textContent = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}`;
-  runtimeStatus.title = runtime.notes;
+  runtimeSelect.title = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}. ${runtime.notes}`;
+  runtimeSelect.setAttribute("aria-label", `Runtime: ${runtime.label}, ${suffix}`);
   updatePlayButton();
 }
 
 function updatePlayButton() {
   playButton.textContent = buttonLabelForRuntime();
-  playButton.disabled = isWarmingRuntime;
-}
-
-function shouldWarmRuntime(runtime) {
-  return runtime && runtime.backend === "ollama" && runtime.available;
-}
-
-async function warmupSelectedRuntime() {
-  warmupRequestId += 1;
-  const requestId = warmupRequestId;
-  const runtime = currentRuntime;
-
-  if (!shouldWarmRuntime(runtime)) {
-    isWarmingRuntime = false;
-    if (runtime) {
-      renderRuntimeStatus(runtime);
-    }
-    return;
-  }
-
-  isWarmingRuntime = true;
-  runtimeStatus.textContent = "Warming local model...";
-  runtimeStatus.title = runtime.notes;
-  updatePlayButton();
-
-  try {
-    const response = await fetch("/api/runtime/warmup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ runtime_id: runtime.id }),
-    });
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error || "Warm-up failed");
-    }
-    if (requestId !== warmupRequestId || !currentRuntime || currentRuntime.id !== runtime.id) {
-      return;
-    }
-
-    runtimeStatus.textContent =
-      payload.status === "ready" ? "Local model ready" : "Live model not warmed — prepared trace still available";
-  } catch (error) {
-    if (requestId !== warmupRequestId || !currentRuntime || currentRuntime.id !== runtime.id) {
-      return;
-    }
-    runtimeStatus.textContent = "Live model not warmed — prepared trace still available";
-  } finally {
-    if (requestId === warmupRequestId && currentRuntime && currentRuntime.id === runtime.id) {
-      isWarmingRuntime = false;
-      updatePlayButton();
-    }
-  }
+  playButton.disabled = false;
 }
 
 async function loadTraceList() {
@@ -164,7 +115,7 @@ function simpleTokenise(text) {
 }
 
 function canEditPrompt() {
-  return currentRuntime && currentRuntime.backend !== "scripted" && currentRuntime.available;
+  return currentRuntime && currentRuntime.backend === "hf-trace" && currentRuntime.available;
 }
 
 function resetPromptToTrace() {
@@ -204,6 +155,7 @@ function renderCandidates(step) {
       row.className = candidate.token === step.selected_token ? "candidate selected" : "candidate";
 
       const label = document.createElement("span");
+      label.className = "candidate-token";
       label.textContent = candidate.token;
 
       const barWrap = document.createElement("span");
@@ -224,26 +176,23 @@ function renderCandidates(step) {
   );
 }
 
-function renderLiveOutputPlaceholder() {
-  const title = document.createElement("p");
-  title.className = "live-output-title";
-  title.textContent = "Live local model response";
-
-  const detail = document.createElement("p");
-  detail.className = "live-output-detail";
-  detail.textContent = "Prepared token probabilities are shown in scripted mode.";
-
-  candidateList.replaceChildren(title, detail);
-}
-
 function joinTokens(tokens) {
   return tokens.join(" ").replaceAll(" .", ".").replaceAll(" ,", ",").replaceAll(" :", ":");
+}
+
+function trailDelayMs() {
+  return TRAIL_SPEED_DELAYS_MS[trailSpeedSelect.value] || TRAIL_SPEED_DELAYS_MS.normal;
+}
+
+function scheduleNextStep() {
+  clearTimeout(timer);
+  timer = setTimeout(runStep, trailDelayMs());
 }
 
 function runStep() {
   if (!currentTrace || stepIndex >= currentTrace.steps.length) {
     playButton.textContent = "Replay trail";
-    clearInterval(timer);
+    clearTimeout(timer);
     timer = null;
     return;
   }
@@ -254,6 +203,7 @@ function runStep() {
   generatedText.textContent = joinTokens(generatedTokens);
   explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
   stepIndex += 1;
+  scheduleNextStep();
 }
 
 async function generateTrace() {
@@ -274,20 +224,6 @@ async function generateTrace() {
   }
 
   return payload;
-}
-
-function showLiveGeneration(payload) {
-  clearInterval(timer);
-  timer = null;
-  generatedTokens = [];
-  stepIndex = currentTrace.steps.length;
-  renderLiveOutputPlaceholder();
-  generatedText.classList.add("generated-text--live");
-  generatedText.classList.toggle("generated-text--live-long", payload.generated_text.length > 360);
-  generatedText.classList.toggle("generated-text--live-very-long", payload.generated_text.length > 640);
-  generatedText.textContent = payload.generated_text;
-  explanation.textContent = "Live Local Model Mode: generated text from the selected local model.";
-  updatePlayButton();
 }
 
 function showHfLiveTrace(payload) {
@@ -319,9 +255,7 @@ async function startDemo() {
     playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
     try {
       const payload = await generateTrace();
-      if (payload.mode === "live") {
-        showLiveGeneration(payload);
-      } else if (payload.mode === "hf-live-trace") {
+      if (payload.mode === "hf-live-trace") {
         showHfLiveTrace(payload);
       } else {
         loadFallbackTrace(payload);
@@ -345,11 +279,10 @@ function startPreparedTrail() {
 
   playButton.textContent = "Running...";
   runStep();
-  timer = setInterval(runStep, 1500);
 }
 
 function resetDemo({ restoreSelectedTrace = false } = {}) {
-  clearInterval(timer);
+  clearTimeout(timer);
   timer = null;
   if (restoreSelectedTrace && selectedTrace) {
     currentTrace = selectedTrace;
@@ -358,9 +291,9 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
   stepIndex = 0;
   runNotice = "";
   candidateList.replaceChildren();
-  generatedText.classList.remove("generated-text--live", "generated-text--live-long", "generated-text--live-very-long");
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
+  renderPrompt();
   updatePlayButton();
 }
 
@@ -380,6 +313,11 @@ runtimeSelect.addEventListener("change", () => {
 promptInput.addEventListener("input", () => {
   if (canEditPrompt()) {
     renderTokens(promptTokens, simpleTokenise(promptInput.value));
+  }
+});
+trailSpeedSelect.addEventListener("change", () => {
+  if (timer) {
+    scheduleNextStep();
   }
 });
 playButton.addEventListener("click", startDemo);

@@ -1,52 +1,18 @@
 # SLM Live Trace Plan
 
-**Project:** Token Trail  
-**Status:** Optional Hugging Face Transformers server implemented; rehearsal-gated  
-**Last updated:** 2026-06-20
+The supported live small-language-model path is the local Hugging Face Transformers trace server. It returns the same replayable structure as scripted traces, with real prompt tokens, generated tokens, candidate alternatives, and probabilities.
 
----
+## Behaviour
 
-## Current decision
+- HF trace mode accepts staff-entered prompts.
+- Scripted mode never accepts staff-entered prompts; reset and runtime switching should restore the curated prompt view.
+- Generated traces replay at the selected browser speed.
+- The trace server trims to the first complete sentence after at least eight generated steps.
+- Incomplete traces fail closed so Token Trail can show the scripted fallback payload.
 
-The preferred SLM live-trace path is a **custom Hugging Face Transformers trace server**, not Ollama logprobs or vLLM.
+## Commands
 
-Use this detailed plan:
-
-```text
-docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
+pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --candidate-source forward-logits
 ```
-
----
-
-## Backend roles
-
-```text
-Scripted trace mode: mandatory fallback and primary teaching mode
-Ollama: simple local live text mode
-HF Transformers trace server: optional live token-trace path with real prompt tokens
-vLLM: stretch/deferred desktop experiment
-```
-
----
-
-## Why this changed
-
-Ollama live text remains useful, but local logprob probing did not return the token alternatives needed for a replayable live trace on the tested Qwen3 models.
-
-vLLM has clearer logprob support, but it is heavier than needed for the local laptop workflow and public booth prototype.
-
-A custom HF Transformers server gives Token Trail direct control over generated token IDs, per-step scores, top returned alternatives, trace conversion, and fallback behaviour.
-
-The current browser flow allows prompt editing for available non-scripted runtimes. HF trace mode sends the edited prompt to the local trace server and then displays the server-returned `prompt_tokens`.
-
----
-
-## Open Day rule
-
-```text
-Scripted trace mode remains mandatory.
-HF live trace mode is optional until proven reliable.
-Ollama live text mode remains available.
-```
-
-Do not make the public demo depend on HF live trace unless it is proven on the final machine during rehearsal.

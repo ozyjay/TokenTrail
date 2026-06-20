@@ -42,6 +42,8 @@ class HfTraceAdapter:
                 timeout_seconds=float(kwargs.get("timeout_seconds") or 2.0),
             )
         except AdapterError as error:
+            if _is_incomplete_trace_error(str(error)):
+                return HfTraceStatus(available=True)
             return HfTraceStatus(available=False, error=str(error))
 
         return HfTraceStatus(available=True)
@@ -77,7 +79,9 @@ class HfTraceAdapter:
                 raw_body = response.read()
         except TimeoutError as error:
             raise AdapterError("HF trace request timed out") from error
-        except (HTTPError, URLError, OSError) as error:
+        except HTTPError as error:
+            raise AdapterError(f"HF trace request failed: {_http_error_message(error)}") from error
+        except (URLError, OSError) as error:
             raise AdapterError(f"HF trace request failed: {error}") from error
 
         try:
@@ -126,3 +130,25 @@ def validate_trace_payload(trace: Any) -> None:
             probability = candidate.get("probability")
             if not isinstance(probability, int | float) or probability < 0 or probability > 1:
                 raise AdapterError("HF trace candidate has invalid probability")
+
+
+def _http_error_message(error: HTTPError) -> str:
+    try:
+        body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        body = ""
+
+    if body:
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            return body
+        if isinstance(payload, dict) and isinstance(payload.get("error"), str):
+            return payload["error"]
+        return body
+
+    return str(error)
+
+
+def _is_incomplete_trace_error(message: str) -> bool:
+    return "complete sentence" in message

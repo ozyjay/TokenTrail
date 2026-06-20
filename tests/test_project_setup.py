@@ -88,8 +88,28 @@ def test_hf_trace_server_powershell_script_uses_core_install_and_forwards_args()
 def test_model_config_file_lists_runtime_models() -> None:
     model_config = json.loads((PROJECT_ROOT / "config" / "models.json").read_text(encoding="utf-8"))
 
+    assert "ollama" not in model_config
+    assert "vllm" not in model_config
+    assert "ollama_model" not in model_config["defaults"]
+    assert "vllm_model" not in model_config["defaults"]
     assert model_config["defaults"]["hf_trace_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
-    assert [entry["model"] for entry in model_config["ollama"]] == ["qwen3:1.7b", "qwen3:4b"]
     hf_trace_models = [entry["model"] for entry in model_config["hf_trace"]]
     assert "Qwen/Qwen2.5-1.5B-Instruct" in hf_trace_models
     assert "Qwen/Qwen2.5-0.5B-Instruct" in hf_trace_models
+
+
+def test_removed_backend_support_files_are_absent() -> None:
+    removed_paths = (
+        "src/token_trail/adapters/ollama.py",
+        "scripts/check_ollama_update.ps1",
+        "scripts/probe_ollama_logprobs.py",
+        "scripts/probe_ollama_logprobs.ps1",
+        "tests/test_ollama_adapter.py",
+        "tests/test_probe_ollama_logprobs.py",
+        "docs/OLLAMA_ADAPTER_PLAN.md",
+        "docs/OLLAMA_PHASE_2_GENERATION_PLAN.md",
+        "docs/OLLAMA_WARMUP_PLAN.md",
+    )
+
+    for relative_path in removed_paths:
+        assert not (PROJECT_ROOT / relative_path).exists(), relative_path

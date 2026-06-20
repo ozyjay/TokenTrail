@@ -6,6 +6,7 @@ import argparse
 import importlib.util
 import json
 import sys
+import warnings
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -24,6 +25,13 @@ from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8600
 DEFAULT_CANDIDATE_SOURCE = "forward-logits"
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"resource_tracker: There appear to be .* leaked semaphore objects to clean up at shutdown",
+    category=UserWarning,
+    module="multiprocessing.resource_tracker",
+)
 
 
 class HfTraceServerError(Exception):
