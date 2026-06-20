@@ -134,11 +134,16 @@ http://127.0.0.1:3100
 
 ### Optional HF trace probe
 
-The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight:
+The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight. The wrapper installs that group before running the probe:
+
+```bash
+bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```
+
+If you prefer to install the optional group separately:
 
 ```bash
 poetry install --with hf-trace
-PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
 ```
 
 ---

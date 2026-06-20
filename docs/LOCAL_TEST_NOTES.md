@@ -162,22 +162,22 @@ TOKEN_TRAIL_VLLM_MODELS=Qwen/Qwen3-4B
 
 **Context:** The HF trace path is still a spike. The CLI probe checks whether the current machine can load a small Hugging Face Transformers causal language model and convert generated token scores into Token Trail-shaped `hf-live-trace` JSON.
 
-**Install optional probe dependencies through Poetry if needed:**
+**Run a compact human-readable probe:**
+
+```bash
+bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```
+
+The wrapper installs optional probe dependencies through Poetry:
 
 ```bash
 poetry install --with hf-trace
 ```
 
-**Run a compact human-readable probe:**
-
-```bash
-PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
-```
-
 **Run JSON mode for contract inspection:**
 
 ```bash
-PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
+bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
 ```
 
 **Pass condition:** generated text appears, generation steps are non-empty, each step has candidate alternatives, elapsed time is acceptable for rehearsal, and the script exits with status `0`.

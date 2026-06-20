@@ -45,3 +45,11 @@ def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:
 
     assert hf_trace_group["optional"] is True
     assert set(hf_trace_group["dependencies"]) == {"torch", "transformers", "accelerate"}
+
+
+def test_hf_trace_probe_shell_script_installs_optional_group_and_forwards_args() -> None:
+    script = (PROJECT_ROOT / "scripts/probe_hf_trace.sh").read_text(encoding="utf-8")
+
+    assert "poetry install --with hf-trace" in script
+    assert "PYTHONPATH=src poetry run python scripts/probe_hf_trace.py" in script
+    assert '"$@"' in script

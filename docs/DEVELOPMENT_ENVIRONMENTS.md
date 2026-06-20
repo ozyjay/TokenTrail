@@ -94,7 +94,13 @@ http://127.0.0.1:3100/health
 
 The default setup installs only the dependencies needed for scripted mode, tests, and the local app.
 
-Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path:
+Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path. The wrapper installs the optional group before running the probe:
+
+```bash
+bash scripts/probe_hf_trace.sh --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```
+
+Manual equivalent:
 
 ```bash
 poetry install --with hf-trace
