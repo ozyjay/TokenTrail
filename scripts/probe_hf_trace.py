@@ -61,6 +61,83 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
+def decode_token(tokenizer: Any, token_id: int) -> str:
+    return str(tokenizer.decode(int(token_id), skip_special_tokens=True))
+
+
+def decode_token_ids(tokenizer: Any, token_ids: Sequence[int]) -> list[str]:
+    return [decode_token(tokenizer, token_id) for token_id in token_ids if decode_token(tokenizer, token_id)]
+
+
+def scalar_to_float(value: Any) -> float:
+    if hasattr(value, "item"):
+        value = value.item()
+    return float(value)
+
+
+def build_candidates(
+    *,
+    tokenizer: Any,
+    selected_token_id: int,
+    selected_probability: float,
+    top_indices: Sequence[int],
+    top_probabilities: Sequence[Any],
+) -> list[dict[str, float | str]]:
+    candidates_by_token: dict[str, float] = {}
+
+    for token_id, probability_value in zip(top_indices, top_probabilities, strict=False):
+        token = decode_token(tokenizer, int(token_id))
+        if not token:
+            continue
+        probability = scalar_to_float(probability_value)
+        if probability < 0 or probability > 1:
+            continue
+        if token not in candidates_by_token or probability > candidates_by_token[token]:
+            candidates_by_token[token] = probability
+
+    selected_token = decode_token(tokenizer, int(selected_token_id))
+    if selected_token and selected_token not in candidates_by_token and 0 <= selected_probability <= 1:
+        candidates_by_token[selected_token] = float(selected_probability)
+
+    return [
+        {"token": token, "probability": probability}
+        for token, probability in sorted(candidates_by_token.items(), key=lambda item: item[1], reverse=True)
+    ]
+
+
+def build_trace_payload(
+    *,
+    model: str,
+    prompt: str,
+    tokenizer: Any,
+    prompt_token_ids: Sequence[int],
+    selected_token_ids: Sequence[int],
+    candidates_by_step: Sequence[list[dict[str, float | str]]],
+) -> dict[str, Any]:
+    steps = []
+    for selected_token_id, candidates in zip(selected_token_ids, candidates_by_step, strict=True):
+        selected_token = decode_token(tokenizer, int(selected_token_id))
+        if not selected_token:
+            continue
+        steps.append(
+            {
+                "selected_token": selected_token,
+                "candidates": candidates,
+                "explanation": TRACE_EXPLANATION,
+            }
+        )
+
+    trace = {
+        "mode": "hf-live-trace",
+        "model": model,
+        "prompt": prompt,
+        "prompt_tokens": decode_token_ids(tokenizer, prompt_token_ids),
+        "steps": steps,
+    }
+    validate_trace_payload(trace)
+    return trace
+
+
 def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
     raise ProbeError("HF probe implementation is incomplete")
 
