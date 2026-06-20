@@ -32,6 +32,7 @@ def test_local_test_notes_document_hf_trace_probe() -> None:
 
     assert "HF trace CLI probe" in notes
     assert "pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1" in notes
+    assert "pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1" in notes
     assert "--candidate-source generation-scores" in notes
 
 

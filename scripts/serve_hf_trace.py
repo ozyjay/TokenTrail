@@ -1,0 +1,227 @@
+"""Serve Token Trail-shaped Hugging Face traces over local HTTP."""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import sys
+from dataclasses import dataclass
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, Sequence
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from token_trail.adapters.base import AdapterError  # noqa: E402
+from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
+
+
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8600
+DEFAULT_CANDIDATE_SOURCE = "forward-logits"
+
+
+class HfTraceServerError(Exception):
+    """Raised when a request cannot produce a valid HF trace."""
+
+
+@dataclass
+class TransformersTraceRunner:
+    candidate_source: str = DEFAULT_CANDIDATE_SOURCE
+
+    def __post_init__(self) -> None:
+        self._probe = _load_probe_module()
+        self._torch = None
+        self._model_class = None
+        self._tokenizer_class = None
+        self._models: dict[str, tuple[Any, Any]] = {}
+
+    def generate_trace(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        max_new_tokens: int,
+        top_k: int,
+        temperature: float,
+    ) -> dict[str, Any]:
+        tokenizer, loaded_model = self._model_and_tokenizer(model)
+        generated = self._probe.generate_with_scores(
+            tokenizer=tokenizer,
+            model=loaded_model,
+            torch_module=self._torch,
+            prompt=prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+        trace = self._probe.build_trace_from_generation(
+            model_name=model,
+            prompt=prompt,
+            tokenizer=tokenizer,
+            model=loaded_model,
+            torch_module=self._torch,
+            generated=generated,
+            top_k=top_k,
+            candidate_source=self.candidate_source,
+        )
+        validate_trace_payload(trace)
+        return trace
+
+    def _model_and_tokenizer(self, model_name: str) -> tuple[Any, Any]:
+        if self._torch is None or self._model_class is None or self._tokenizer_class is None:
+            self._torch, self._model_class, self._tokenizer_class = self._probe.load_hf_libraries()
+
+        if model_name not in self._models:
+            self._models[model_name] = self._probe.load_model_and_tokenizer(
+                model_name=model_name,
+                model_class=self._model_class,
+                tokenizer_class=self._tokenizer_class,
+                torch_module=self._torch,
+            )
+
+        return self._models[model_name]
+
+
+@dataclass
+class HfTraceServerState:
+    trace_runner: Any
+
+
+class HfTraceHTTPServer(ThreadingHTTPServer):
+    def __init__(self, server_address: tuple[str, int], state: HfTraceServerState) -> None:
+        super().__init__(server_address, HfTraceRequestHandler)
+        self.state = state
+
+
+class HfTraceRequestHandler(BaseHTTPRequestHandler):
+    server_version = "TokenTrailHfTrace/0.1"
+
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path == "/health":
+            self._send_json({"status": "ok", "service": "token-trail-hf-trace"})
+            return
+        self._send_json({"error": "Not found"}, status=404)
+
+    def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path != "/api/trace":
+            self._send_json({"error": "Not found"}, status=404)
+            return
+
+        try:
+            request = self._read_request()
+            trace = self.server.state.trace_runner.generate_trace(**request)
+            validate_trace_payload(trace)
+        except (AdapterError, HfTraceServerError) as error:
+            self._send_json({"error": str(error)}, status=400)
+            return
+        except Exception as error:  # pragma: no cover - defensive HTTP boundary
+            self._send_json({"error": f"HF trace generation failed: {error}"}, status=500)
+            return
+
+        self._send_json(trace)
+
+    def _read_request(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise HfTraceServerError("Request body must be valid JSON") from error
+
+        prompt = _required_string(payload, "prompt")
+        model = _required_string(payload, "model")
+        return {
+            "prompt": prompt,
+            "model": model,
+            "max_new_tokens": _int_setting(payload, "max_new_tokens", 24, minimum=1),
+            "top_k": _int_setting(payload, "top_k", 5, minimum=1),
+            "temperature": _float_setting(payload, "temperature", 0.3, minimum=0),
+        }
+
+    def _send_json(self, payload: dict[str, Any], status: int = 200) -> None:
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+def create_server(server_address: tuple[str, int], trace_runner: Any | None = None) -> HfTraceHTTPServer:
+    return HfTraceHTTPServer(server_address, HfTraceServerState(trace_runner or TransformersTraceRunner()))
+
+
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Serve local HF traces for Token Trail.")
+    parser.add_argument("--host", default=DEFAULT_HOST)
+    parser.add_argument("--port", default=DEFAULT_PORT, type=int)
+    parser.add_argument(
+        "--candidate-source",
+        default=DEFAULT_CANDIDATE_SOURCE,
+        choices=("forward-logits", "generation-scores"),
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parse_args(argv)
+    runner = TransformersTraceRunner(candidate_source=args.candidate_source)
+    httpd = create_server((args.host, args.port), trace_runner=runner)
+    print(f"HF trace server listening at http://{args.host}:{args.port}/api/trace", flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("Stopping HF trace server.", flush=True)
+    finally:
+        httpd.server_close()
+    return 0
+
+
+def _load_probe_module() -> Any:
+    script_path = PROJECT_ROOT / "scripts" / "probe_hf_trace.py"
+    spec = importlib.util.spec_from_file_location("probe_hf_trace", script_path)
+    if spec is None or spec.loader is None:
+        raise HfTraceServerError("Could not load HF trace probe module")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _required_string(payload: Any, key: str) -> str:
+    if not isinstance(payload, dict):
+        raise HfTraceServerError("Request body must be a JSON object")
+
+    value = payload.get(key)
+    if not isinstance(value, str) or not value.strip():
+        raise HfTraceServerError(f"Request body is missing required string: {key}")
+    return value.strip()
+
+
+def _int_setting(payload: dict[str, Any], key: str, default: int, *, minimum: int) -> int:
+    value = payload.get(key, default)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as error:
+        raise HfTraceServerError(f"{key} must be an integer") from error
+    if parsed < minimum:
+        raise HfTraceServerError(f"{key} must be at least {minimum}")
+    return parsed
+
+
+def _float_setting(payload: dict[str, Any], key: str, default: float, *, minimum: float) -> float:
+    value = payload.get(key, default)
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise HfTraceServerError(f"{key} must be a number") from error
+    if parsed < minimum:
+        raise HfTraceServerError(f"{key} must be at least {minimum}")
+    return parsed
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

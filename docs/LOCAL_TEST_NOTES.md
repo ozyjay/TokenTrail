@@ -180,6 +180,14 @@ poetry install --with hf-trace
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --json
 ```
 
+**Serve traces for Token Trail UI testing:**
+
+```powershell
+pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --host 127.0.0.1 --port 8600
+```
+
+Run the server in one terminal, then run Token Trail in another terminal. The UI marks HF trace runtimes available only after `POST /api/trace` on port `8600` returns a valid non-empty trace.
+
 The probe defaults to `--candidate-source forward-logits`, which runs a second model pass over the generated sequence to produce richer display alternatives. To compare against the original processed generation scores, run:
 
 ```powershell
