@@ -97,3 +97,23 @@ def test_build_trace_payload_matches_token_trail_contract() -> None:
     assert trace["prompt_tokens"] == ["Write", " one", " sentence"]
     assert [step["selected_token"] for step in trace["steps"]] == ["A", " robot"]
     assert trace["steps"][0]["explanation"] == probe.TRACE_EXPLANATION
+
+
+def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
+    probe = load_probe_module()
+    real_import = __import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "torch":
+            raise ImportError("torch missing in test")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr("builtins.__import__", fake_import)
+
+    try:
+        probe.load_hf_libraries()
+    except probe.ProbeError as error:
+        assert "Missing optional dependency 'torch'" in str(error)
+        assert "python3 -m pip install torch transformers" in str(error)
+    else:
+        raise AssertionError("expected ProbeError")
