@@ -248,6 +248,13 @@ Choose reliability and clear short output over model quality.
 
 Create a tiny local HF trace server or one-off probe that loads one small model and returns trace-shaped JSON.
 
+CLI probe implemented:
+
+- `scripts/probe_hf_trace.py` and `scripts/probe_hf_trace.ps1` can load `Qwen/Qwen2.5-0.5B-Instruct` and emit Token Trail-shaped `hf-live-trace` JSON.
+- `--candidate-source forward-logits` is the preferred probe path. It runs a second forward pass over the generated sequence and produced richer candidate alternatives in the local spike.
+- `--candidate-source generation-scores` remains available for comparison and debugging, but the local spike showed those processed scores can collapse alternatives after generation-time filtering.
+- The first local run downloaded the model weights and took several minutes. Cached short runs were fast enough for continued investigation, but the server path still needs its own rehearsal before enabling HF trace mode.
+
 Go/no-go:
 
 - generated text appears;

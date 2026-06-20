@@ -42,6 +42,7 @@ def test_main_docs_explain_hf_trace_poetry_group() -> None:
     for document in (readme, environments):
         assert "poetry install --with hf-trace" in document
         assert "pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1" in document
+        assert "--candidate-source forward-logits" in document
 
 
 def test_main_docs_do_not_reference_shell_scripts() -> None:
@@ -62,3 +63,12 @@ def test_agents_doc_records_powershell_only_script_policy() -> None:
     assert "Use PowerShell scripts only" in agents
     assert "Do not add shell scripts" in agents
     assert "pwsh -NoProfile -File ./scripts/test.ps1" in agents
+    assert "--candidate-source forward-logits" in agents
+
+
+def test_hf_trace_plan_records_cli_probe_result() -> None:
+    plan = (PROJECT_ROOT / "docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md").read_text(encoding="utf-8")
+
+    assert "CLI probe implemented" in plan
+    assert "--candidate-source forward-logits" in plan
+    assert "generation-scores" in plan

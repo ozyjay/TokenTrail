@@ -128,8 +128,10 @@ http://127.0.0.1:3100
 The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight. The wrapper installs that group before running the probe:
 
 ```powershell
-pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
 ```
+
+`--candidate-source forward-logits` is the default and preferred probe mode. It runs a second model pass over the generated sequence so the trace includes useful token alternatives. Use `--candidate-source generation-scores` only when comparing against the raw processed generation scores.
 
 If you prefer to install the optional group separately:
 

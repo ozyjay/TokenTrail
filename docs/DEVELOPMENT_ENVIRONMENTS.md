@@ -88,15 +88,17 @@ The default setup installs only the dependencies needed for scripted mode, tests
 Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path. The wrapper installs the optional group before running the probe:
 
 ```powershell
-pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
 ```
 
 Manual equivalent:
 
 ```bash
 poetry install --with hf-trace
-PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
 ```
+
+`--candidate-source forward-logits` is the default probe mode. It performs a second forward pass over the generated sequence and gives more useful candidate alternatives than `--candidate-source generation-scores`, which is kept for comparison and debugging.
 
 Keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` unless the probe is reliable on the target machine.
 

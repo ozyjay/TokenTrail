@@ -32,3 +32,14 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1
 ```powershell
 poetry install --with hf-trace
 ```
+
+## HF Trace Probe
+
+- Run the local probe through PowerShell:
+
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
+```
+
+- `--candidate-source forward-logits` is the default probe mode and should stay the documented path for local validation.
+- Use `--candidate-source generation-scores` only for comparison or debugging of processed generation scores.

@@ -186,6 +186,8 @@ The probe defaults to `--candidate-source forward-logits`, which runs a second m
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source generation-scores
 ```
 
+**Observed local result:** the first run downloaded the model weights and took several minutes. A cached short run with `--candidate-source forward-logits` produced useful non-empty alternatives quickly enough to keep the HF server spike alive. The `generation-scores` path is still useful for comparison, but it can show collapsed candidate alternatives after generation-time filtering.
+
 **Pass condition:** generated text appears, generation steps are non-empty, each step has candidate alternatives, elapsed time is acceptable for rehearsal, and the script exits with status `0`.
 
 **Fail condition:** keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` if model load time, memory use, generation latency, or trace quality is not acceptable on the target machine.
