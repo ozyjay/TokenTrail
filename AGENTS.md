@@ -59,3 +59,8 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 
 - `scripts/serve_hf_trace.py` intentionally suppresses Python's known `multiprocessing.resource_tracker` leaked semaphore shutdown warning from the HF/ML stack.
 - Do not broaden that warning filter; real runtime and generation errors should remain visible.
+
+## HF Trace Startup
+
+- `scripts/run.ps1` should wait only for the HF trace server health endpoint, not for default-model warm-up.
+- The first HF generation request may pay the model-load cost in the web app; keep that visible rather than blocking local stack startup.

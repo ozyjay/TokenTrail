@@ -39,7 +39,7 @@ Run the local probe with the documented candidate source:
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
 
-`scripts/run.ps1` starts and warms the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`.
+`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits only for the trace server health check; the selected model loads on the first HF generation request in the web app.
 
 ## UX Notes
 

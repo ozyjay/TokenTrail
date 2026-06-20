@@ -43,3 +43,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source generation
 The HF trace server may load libraries that use Python multiprocessing primitives. The server script suppresses Python's known `multiprocessing.resource_tracker` leaked semaphore warning during shutdown so a normal Ctrl+C stop stays readable.
 
 Keep that suppression narrow to the known shutdown warning. Request failures, trace validation failures, and model-loading errors should still be reported.
+
+## Startup Behaviour
+
+The local runner waits only for the HF trace server `/health` endpoint. It should not submit a warm-up generation for the configured default model during `scripts/run.ps1`; model loading happens on the first real HF generation request.

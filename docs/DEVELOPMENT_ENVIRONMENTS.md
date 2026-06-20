@@ -39,3 +39,5 @@ TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=96
 ```
 
 Token Trail binds to `127.0.0.1:3100` by default. The HF trace server binds to `127.0.0.1:8600` by default when managed by `scripts/run.ps1`.
+
+`scripts/run.ps1` waits only for the HF trace server health endpoint. It does not pre-load the default model; model loading happens on the first HF generation request from the web app.

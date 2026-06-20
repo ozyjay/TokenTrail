@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 from token_trail.adapters.base import AdapterError
@@ -30,20 +31,19 @@ class HfTraceAdapter:
         self._opener = opener
 
     def status(self, **kwargs: Any) -> HfTraceStatus:
-        """Return true only when a tiny trace probe returns usable steps."""
+        """Return true when the HF trace server health endpoint is reachable."""
 
+        timeout_seconds = float(kwargs.get("timeout_seconds") or 2.0)
+        request = Request(_health_url_for_trace_url(self.trace_url), method="GET")
         try:
-            self.generate_trace(
-                prompt="Token Trail readiness check.",
-                model=str(kwargs.get("model") or ""),
-                max_new_tokens=int(kwargs.get("max_new_tokens") or 1),
-                top_k=int(kwargs.get("top_k") or 1),
-                temperature=float(kwargs.get("temperature") or 0),
-                timeout_seconds=float(kwargs.get("timeout_seconds") or 2.0),
-            )
+            with self._opener(request, timeout=timeout_seconds) as response:
+                if not 200 <= int(response.status) < 300:
+                    return HfTraceStatus(available=False, error=f"HF trace health returned HTTP {response.status}")
         except AdapterError as error:
             if _is_incomplete_trace_error(str(error)):
                 return HfTraceStatus(available=True)
+            return HfTraceStatus(available=False, error=str(error))
+        except (HTTPError, URLError, TimeoutError, OSError) as error:
             return HfTraceStatus(available=False, error=str(error))
 
         return HfTraceStatus(available=True)
@@ -152,3 +152,8 @@ def _http_error_message(error: HTTPError) -> str:
 
 def _is_incomplete_trace_error(message: str) -> bool:
     return "complete sentence" in message
+
+
+def _health_url_for_trace_url(trace_url: str) -> str:
+    parsed = urlparse(trace_url)
+    return urlunparse((parsed.scheme or "http", parsed.netloc, "/health", "", "", ""))

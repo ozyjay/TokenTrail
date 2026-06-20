@@ -1,13 +1,10 @@
 from token_trail.config import RuntimeConfig
 from token_trail.local_runner import (
+    ensure_hf_trace_server,
     hf_trace_health_url,
     hf_trace_server_address,
     should_manage_hf_trace,
-    warm_hf_trace_server,
 )
-from urllib.error import HTTPError
-import io
-import json
 
 
 def make_config(
@@ -49,18 +46,31 @@ def test_hf_trace_health_url_uses_trace_server_origin() -> None:
     )
 
 
-def test_warm_hf_trace_server_accepts_incomplete_readiness_trace(monkeypatch, capsys) -> None:
-    def fake_urlopen(request, timeout):
-        raise HTTPError(
-            url="http://127.0.0.1:8600/api/trace",
-            code=500,
-            msg="error",
-            hdrs={},
-            fp=io.BytesIO(json.dumps({"error": "Generated trace did not reach a complete sentence"}).encode("utf-8")),
-        )
+def test_ensure_hf_trace_server_does_not_wait_for_model_warmup_when_already_healthy(monkeypatch) -> None:
+    monkeypatch.setattr("token_trail.local_runner.is_hf_trace_server_healthy", lambda config: True)
 
-    monkeypatch.setattr("token_trail.local_runner.urlopen", fake_urlopen)
+    process = ensure_hf_trace_server(make_config())
 
-    warm_hf_trace_server(make_config())
+    assert process is None
 
-    assert "HF trace model warmed" in capsys.readouterr().out
+
+def test_ensure_hf_trace_server_does_not_wait_for_model_warmup_after_start(monkeypatch) -> None:
+    health_calls = []
+
+    class FakeProcess:
+        returncode = None
+
+        def poll(self):
+            return None
+
+    def fake_is_healthy(config):
+        health_calls.append(config)
+        return len(health_calls) > 1
+
+    monkeypatch.setattr("token_trail.local_runner.is_hf_trace_server_healthy", fake_is_healthy)
+    monkeypatch.setattr("token_trail.local_runner.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
+    monkeypatch.setattr("token_trail.local_runner.time.sleep", lambda seconds: None)
+
+    process = ensure_hf_trace_server(make_config())
+
+    assert isinstance(process, FakeProcess)

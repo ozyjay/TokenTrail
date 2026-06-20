@@ -30,3 +30,7 @@ Reset now re-renders the prompt for the current runtime. In scripted mode this h
 ## 2026-06-20 — HF Trace Shutdown
 
 Stopping the combined local stack prints the Token Trail and HF trace server stop messages. Python's known `multiprocessing.resource_tracker` leaked semaphore warning from the HF/ML stack is suppressed in `scripts/serve_hf_trace.py` so Ctrl+C shutdown stays clean.
+
+## 2026-06-20 — HF Trace Startup
+
+`scripts/run.ps1` starts the HF trace server and waits only for `/health`. It no longer waits for the default model to warm before starting the Token Trail web app; the first HF generation request pays the model-load cost visibly in the browser flow.

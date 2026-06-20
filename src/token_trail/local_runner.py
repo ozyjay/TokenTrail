@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import time
@@ -10,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 
 from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config
 from token_trail.ports import check_port_or_exit
@@ -18,9 +17,6 @@ from token_trail.server import run_server
 
 
 HF_TRACE_HEALTH_TIMEOUT_SECONDS = 20.0
-HF_TRACE_STARTUP_WARM_TIMEOUT_SECONDS = 300.0
-
-
 def should_manage_hf_trace(config: RuntimeConfig) -> bool:
     return config.backend == "hf-trace" and config.hf_trace_enabled
 
@@ -72,7 +68,6 @@ def run_local_stack(config: RuntimeConfig) -> None:
 def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | None:
     if is_hf_trace_server_healthy(config):
         print("HF trace server is already running.")
-        warm_hf_trace_server(config)
         return None
 
     host, port = hf_trace_server_address(config)
@@ -91,7 +86,6 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
 
     try:
         wait_for_hf_trace_health(config, process=process)
-        warm_hf_trace_server(config)
     except Exception:
         stop_process(process)
         raise
@@ -122,45 +116,6 @@ def wait_for_hf_trace_health(
         time.sleep(0.25)
 
     raise RuntimeError("Timed out waiting for HF trace server health check")
-
-
-def warm_hf_trace_server(config: RuntimeConfig) -> None:
-    print(f"Warming HF trace model {config.hf_trace_model}...")
-    payload = {
-        "prompt": "Token Trail readiness check.",
-        "model": config.hf_trace_model,
-        "max_new_tokens": 1,
-        "top_k": 1,
-        "temperature": 0,
-    }
-    request = Request(
-        config.hf_trace_url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urlopen(request, timeout=HF_TRACE_STARTUP_WARM_TIMEOUT_SECONDS) as response:
-            response.read()
-    except HTTPError as error:
-        if "complete sentence" in _http_error_body(error):
-            print("HF trace model warmed; readiness trace did not need to be replayable.")
-            return
-        print(f"Warning: could not warm HF trace server; scripted fallback remains available. {error}")
-        return
-    except (URLError, TimeoutError, OSError) as error:
-        print(f"Warning: could not warm HF trace server; scripted fallback remains available. {error}")
-        return
-
-    print("HF trace model warmed.")
-
-
-def _http_error_body(error: HTTPError) -> str:
-    try:
-        return error.read().decode("utf-8", errors="replace")
-    except OSError:
-        return ""
 
 
 def stop_process(process: subprocess.Popen[Any] | None) -> None:
