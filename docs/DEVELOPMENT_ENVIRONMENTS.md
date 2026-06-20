@@ -90,6 +90,21 @@ http://127.0.0.1:3100/health
 
 ---
 
+## Optional Poetry groups
+
+The default setup installs only the dependencies needed for scripted mode, tests, and the local app.
+
+Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path:
+
+```bash
+poetry install --with hf-trace
+PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
+```
+
+Keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` unless the probe is reliable on the target machine.
+
+---
+
 ## Environment configuration
 
 Copy the example file when you need machine-specific settings:

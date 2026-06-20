@@ -114,7 +114,7 @@ def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
         probe.load_hf_libraries()
     except probe.ProbeError as error:
         assert "Missing optional dependency 'torch'" in str(error)
-        assert "python3 -m pip install torch transformers" in str(error)
+        assert "poetry install --with hf-trace" in str(error)
     else:
         raise AssertionError("expected ProbeError")
 
