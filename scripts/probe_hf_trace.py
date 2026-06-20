@@ -172,16 +172,14 @@ def load_hf_libraries() -> tuple[Any, Any, Any]:
         import torch
     except ImportError as error:
         raise ProbeError(
-            "Missing optional dependency 'torch'. Install the optional Poetry group with: "
-            "poetry install --with hf-trace"
+            "Missing required dependency 'torch'. Install project dependencies with: poetry install"
         ) from error
 
     try:
         from transformers import AutoModelForCausalLM, AutoTokenizer
     except ImportError as error:
         raise ProbeError(
-            "Missing optional dependency 'transformers'. Install the optional Poetry group with: "
-            "poetry install --with hf-trace"
+            "Missing required dependency 'transformers'. Install project dependencies with: poetry install"
         ) from error
 
     return torch, AutoModelForCausalLM, AutoTokenizer

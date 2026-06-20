@@ -156,8 +156,9 @@ def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
     try:
         probe.load_hf_libraries()
     except probe.ProbeError as error:
-        assert "Missing optional dependency 'torch'" in str(error)
-        assert "poetry install --with hf-trace" in str(error)
+        assert "Missing required dependency 'torch'" in str(error)
+        assert "poetry install" in str(error)
+        assert "--with hf-trace" not in str(error)
     else:
         raise AssertionError("expected ProbeError")
 

@@ -187,10 +187,10 @@ TOKEN_TRAIL_VLLM_MODELS=Qwen/Qwen3-4B
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5
 ```
 
-The wrapper installs optional probe dependencies through Poetry:
+HF trace dependencies are installed by the normal Poetry setup:
 
 ```bash
-poetry install --with hf-trace
+poetry install
 ```
 
 **Run JSON mode for contract inspection:**

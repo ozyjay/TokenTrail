@@ -357,7 +357,6 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
   generatedTokens = [];
   stepIndex = 0;
   runNotice = "";
-  resetPromptToTrace();
   candidateList.replaceChildren();
   generatedText.classList.remove("generated-text--live", "generated-text--live-long", "generated-text--live-very-long");
   generatedText.textContent = "";

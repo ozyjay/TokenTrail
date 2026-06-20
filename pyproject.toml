@@ -4,21 +4,17 @@ version = "0.1.0"
 description = "Open Day demo showing LLM-style next-token prediction step by step"
 requires-python = ">=3.12,<3.13"
 authors = [{ name = "Jason Holdsworth" }]
-dependencies = []
+dependencies = [
+    "torch",
+    "transformers",
+    "accelerate",
+]
 
 [tool.poetry]
 package-mode = false
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
-
-[tool.poetry.group.hf-trace]
-optional = true
-
-[tool.poetry.group.hf-trace.dependencies]
-torch = "*"
-transformers = "*"
-accelerate = "*"
 
 [tool.pytest.ini_options]
 addopts = "-p no:cacheprovider"

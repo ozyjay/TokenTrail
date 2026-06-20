@@ -18,6 +18,7 @@
 - Run scripts with `pwsh`, for example:
 
 ```powershell
+pwsh -NoProfile -File ./scripts/clean.ps1
 pwsh -NoProfile -File ./scripts/test.ps1
 pwsh -NoProfile -File ./scripts/run.ps1
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1
@@ -27,10 +28,10 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1
 
 - Use Poetry for project dependencies.
 - Keep heavyweight or experimental dependencies in optional Poetry groups where practical.
-- The HF trace probe dependencies live in the optional `hf-trace` group:
+- HF trace probe and server dependencies are core project dependencies now. Use the normal install path:
 
 ```powershell
-poetry install --with hf-trace
+poetry install
 ```
 
 ## HF Trace Probe

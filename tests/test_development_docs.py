@@ -7,6 +7,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 def test_cross_platform_scripts_exist() -> None:
     for relative_path in (
         "scripts/setup.ps1",
+        "scripts/clean.ps1",
         "scripts/test.ps1",
         "scripts/run.ps1",
         "scripts/check_ports.ps1",
@@ -36,12 +37,13 @@ def test_local_test_notes_document_hf_trace_probe() -> None:
     assert "--candidate-source generation-scores" in notes
 
 
-def test_main_docs_explain_hf_trace_poetry_group() -> None:
+def test_main_docs_explain_hf_trace_is_core_dependency() -> None:
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
     environments = (PROJECT_ROOT / "docs/DEVELOPMENT_ENVIRONMENTS.md").read_text(encoding="utf-8")
 
     for document in (readme, environments):
-        assert "poetry install --with hf-trace" in document
+        assert "poetry install --with hf-trace" not in document
+        assert "HF trace dependencies are installed by the normal Poetry setup" in document
         assert "pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1" in document
         assert "--candidate-source forward-logits" in document
 
@@ -63,6 +65,7 @@ def test_agents_doc_records_powershell_only_script_policy() -> None:
 
     assert "Use PowerShell scripts only" in agents
     assert "Do not add shell scripts" in agents
+    assert "pwsh -NoProfile -File ./scripts/clean.ps1" in agents
     assert "pwsh -NoProfile -File ./scripts/test.ps1" in agents
     assert "--candidate-source forward-logits" in agents
 

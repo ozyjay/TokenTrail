@@ -81,11 +81,11 @@ http://127.0.0.1:3100/health
 
 ---
 
-## Optional Poetry groups
+## Poetry Dependencies
 
-The default setup installs only the dependencies needed for scripted mode, tests, and the local app.
+The default setup installs the dependencies needed for scripted mode, tests, the local app, and HF trace probing.
 
-Install the optional Hugging Face trace dependencies only when you are deliberately testing the HF live trace path. The wrapper installs the optional group before running the probe:
+HF trace dependencies are installed by the normal Poetry setup. After `poetry install`, run the probe wrapper directly:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
@@ -94,7 +94,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Ins
 Manual equivalent:
 
 ```bash
-poetry install --with hf-trace
+poetry install
 PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
 ```
 

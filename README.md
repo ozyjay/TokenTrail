@@ -115,6 +115,7 @@ Do not change ports randomly for rehearsal or Open Day. If a required port is oc
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/setup.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/clean.ps1 -DryRun
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/test.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/check_ports.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File ./scripts/run.ps1
@@ -128,7 +129,7 @@ http://127.0.0.1:3100
 
 ### Optional HF trace probe and server
 
-The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight. The wrapper installs that group before running the probe:
+HF trace dependencies are installed by the normal Poetry setup. Run `poetry install` once, then use the probe wrapper directly:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
@@ -149,12 +150,6 @@ pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --host 127.0.0.1 --port 8600
 ```
 
 If the server is stopped, times out, or fails to return a valid trace, Token Trail keeps using the scripted fallback.
-
-If you prefer to install the optional group separately:
-
-```bash
-poetry install --with hf-trace
-```
 
 ---
 

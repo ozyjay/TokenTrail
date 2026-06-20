@@ -14,6 +14,7 @@ def test_required_project_files_exist() -> None:
         "README.md",
         "config/models.json",
         "scripts/setup.ps1",
+        "scripts/clean.ps1",
         "scripts/test.ps1",
         "scripts/run.ps1",
         "scripts/serve_hf_trace.ps1",
@@ -38,35 +39,48 @@ def test_run_scripts_delegate_host_and_port_config_to_python() -> None:
     assert "TOKEN_TRAIL_PORT" not in powershell_script
 
 
+def test_clean_script_removes_local_python_and_test_artifacts_only() -> None:
+    script = (PROJECT_ROOT / "scripts" / "clean.ps1").read_text(encoding="utf-8")
+
+    assert "Remove-Item" in script
+    assert "__pycache__" in script
+    assert ".pytest_cache" in script
+    assert ".ruff_cache" in script
+    assert "build" in script
+    assert "dist" in script
+    assert "$DryRun" in script
+    assert "Get-ChildItem -Path $ProjectRoot" in script
+
+
 def test_run_script_manages_hf_trace_stack_when_configured() -> None:
     powershell_script = (PROJECT_ROOT / "scripts/run.ps1").read_text(encoding="utf-8")
 
-    assert "RequiresHfTrace" in powershell_script
-    assert "poetry install --with hf-trace" in powershell_script
+    assert "poetry install --with hf-trace" not in powershell_script
+    assert "Installing optional HF trace" not in powershell_script
     assert "poetry run python -m token_trail.local_runner" in powershell_script
 
 
-def test_hf_trace_probe_dependencies_are_optional_poetry_group() -> None:
+def test_hf_trace_probe_dependencies_are_core_poetry_dependencies() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    hf_trace_group = pyproject["tool"]["poetry"]["group"]["hf-trace"]
-
-    assert hf_trace_group["optional"] is True
-    assert set(hf_trace_group["dependencies"]) == {"torch", "transformers", "accelerate"}
+    assert "hf-trace" not in pyproject["tool"]["poetry"].get("group", {})
+    assert {"torch", "transformers", "accelerate"}.issubset(set(pyproject["project"]["dependencies"]))
 
 
-def test_hf_trace_probe_powershell_script_installs_optional_group_and_forwards_args() -> None:
+def test_hf_trace_probe_powershell_script_uses_core_install_and_forwards_args() -> None:
     script = (PROJECT_ROOT / "scripts/probe_hf_trace.ps1").read_text(encoding="utf-8")
 
-    assert "poetry install --with hf-trace" in script
+    assert "poetry install --with hf-trace" not in script
+    assert "poetry install" not in script
     assert "$env:PYTHONPATH = \"src\"" in script
     assert "poetry run python scripts/probe_hf_trace.py @args" in script
 
 
-def test_hf_trace_server_powershell_script_installs_optional_group_and_forwards_args() -> None:
+def test_hf_trace_server_powershell_script_uses_core_install_and_forwards_args() -> None:
     script = (PROJECT_ROOT / "scripts/serve_hf_trace.ps1").read_text(encoding="utf-8")
 
-    assert "poetry install --with hf-trace" in script
+    assert "poetry install --with hf-trace" not in script
+    assert "poetry install" not in script
     assert "$env:PYTHONPATH = \"src\"" in script
     assert "poetry run python scripts/serve_hf_trace.py @args" in script
 
@@ -76,7 +90,6 @@ def test_model_config_file_lists_runtime_models() -> None:
 
     assert model_config["defaults"]["hf_trace_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
     assert [entry["model"] for entry in model_config["ollama"]] == ["qwen3:1.7b", "qwen3:4b"]
-    assert [entry["model"] for entry in model_config["hf_trace"]] == [
-        "Qwen/Qwen2.5-1.5B-Instruct",
-        "Qwen/Qwen2.5-0.5B-Instruct",
-    ]
+    hf_trace_models = [entry["model"] for entry in model_config["hf_trace"]]
+    assert "Qwen/Qwen2.5-1.5B-Instruct" in hf_trace_models
+    assert "Qwen/Qwen2.5-0.5B-Instruct" in hf_trace_models
