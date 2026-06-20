@@ -33,6 +33,7 @@ def test_parse_args_uses_fast_probe_defaults() -> None:
     assert args.max_new_tokens == 24
     assert args.top_k == 5
     assert args.temperature == 0.3
+    assert args.candidate_source == "forward-logits"
     assert args.json is False
 
 
@@ -50,6 +51,29 @@ class FakeTokenizer:
 
     def decode(self, token_id: int, skip_special_tokens: bool = True) -> str:
         return self.values[token_id]
+
+
+class FakeVector:
+    def __init__(self, values: list[float]) -> None:
+        self.values = values
+
+    def __getitem__(self, index: int) -> FakeScalar:
+        return FakeScalar(self.values[index])
+
+    def numel(self) -> int:
+        return len(self.values)
+
+
+class FakeTorch:
+    @staticmethod
+    def softmax(score_vector: FakeVector, dim: int = -1) -> FakeVector:
+        total = sum(score_vector.values)
+        return FakeVector([value / total for value in score_vector.values])
+
+    @staticmethod
+    def topk(probabilities: FakeVector, top_k: int) -> tuple[list[FakeScalar], list[int]]:
+        ranked = sorted(enumerate(probabilities.values), key=lambda item: item[1], reverse=True)[:top_k]
+        return [FakeScalar(value) for _, value in ranked], [index for index, _ in ranked]
 
 
 def test_build_candidates_deduplicates_empty_and_repeated_decoded_tokens() -> None:
@@ -70,6 +94,25 @@ def test_build_candidates_deduplicates_empty_and_repeated_decoded_tokens() -> No
         {"token": "A", "probability": 0.42},
         {"token": " robot", "probability": 0.13},
         {"token": "The", "probability": 0.10},
+    ]
+
+
+def test_build_candidates_from_score_vector_uses_raw_logits_for_richer_alternatives() -> None:
+    probe = load_probe_module()
+    tokenizer = FakeTokenizer({1: "A", 2: "The", 3: "One", 4: " robot"})
+
+    candidates = probe.build_candidates_from_score_vector(
+        tokenizer=tokenizer,
+        torch_module=FakeTorch,
+        selected_token_id=4,
+        score_vector=FakeVector([0.0, 5.0, 3.0, 2.0, 4.0]),
+        top_k=3,
+    )
+
+    assert candidates == [
+        {"token": "A", "probability": 5 / 14},
+        {"token": " robot", "probability": 4 / 14},
+        {"token": "The", "probability": 3 / 14},
     ]
 
 
@@ -148,3 +191,22 @@ def test_format_step_preview_includes_candidates() -> None:
     }
 
     assert probe.format_step_preview(trace) == ["1. selected='A' candidates='A' 0.420, 'The' 0.310"]
+
+
+def test_summary_includes_candidate_source(capsys) -> None:
+    probe = load_probe_module()
+    trace = {
+        "candidate_source": "forward-logits",
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "prompt_tokens": ["Write"],
+        "steps": [
+            {
+                "selected_token": "A",
+                "candidates": [{"token": "A", "probability": 0.42}],
+            }
+        ],
+    }
+
+    probe.print_summary(trace=trace, elapsed_seconds=1.25)
+
+    assert "candidate source: forward-logits" in capsys.readouterr().out

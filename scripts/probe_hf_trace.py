@@ -29,6 +29,8 @@ DEFAULT_MAX_NEW_TOKENS = 24
 DEFAULT_TOP_K = 5
 DEFAULT_TEMPERATURE = 0.3
 TRACE_EXPLANATION = "Top returned alternatives from the local model for this token position."
+CANDIDATE_SOURCE_FORWARD_LOGITS = "forward-logits"
+CANDIDATE_SOURCE_GENERATION_SCORES = "generation-scores"
 
 
 class ProbeError(Exception):
@@ -42,6 +44,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-new-tokens", default=DEFAULT_MAX_NEW_TOKENS, type=int, help="Generated token budget")
     parser.add_argument("--top-k", default=DEFAULT_TOP_K, type=int, help="Candidate alternatives per generated token")
     parser.add_argument("--temperature", default=DEFAULT_TEMPERATURE, type=float, help="Sampling temperature")
+    parser.add_argument(
+        "--candidate-source",
+        default=CANDIDATE_SOURCE_FORWARD_LOGITS,
+        choices=(CANDIDATE_SOURCE_FORWARD_LOGITS, CANDIDATE_SOURCE_GENERATION_SCORES),
+        help="Score source for displayed candidate alternatives",
+    )
     parser.add_argument("--json", action="store_true", help="Print full trace JSON instead of the compact summary")
     return parser.parse_args(argv)
 
@@ -103,6 +111,27 @@ def build_candidates(
         {"token": token, "probability": probability}
         for token, probability in sorted(candidates_by_token.items(), key=lambda item: item[1], reverse=True)
     ]
+
+
+def build_candidates_from_score_vector(
+    *,
+    tokenizer: Any,
+    torch_module: Any,
+    selected_token_id: int,
+    score_vector: Any,
+    top_k: int,
+) -> list[dict[str, float | str]]:
+    probabilities = torch_module.softmax(score_vector, dim=-1)
+    selected_probability = scalar_to_float(probabilities[int(selected_token_id)])
+    effective_top_k = min(int(top_k), int(probabilities.numel()))
+    top_probabilities, top_indices = torch_module.topk(probabilities, effective_top_k)
+    return build_candidates(
+        tokenizer=tokenizer,
+        selected_token_id=int(selected_token_id),
+        selected_probability=selected_probability,
+        top_indices=normalise_token_id_list(top_indices),
+        top_probabilities=list(top_probabilities),
+    )
 
 
 def build_trace_payload(
@@ -180,9 +209,11 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
         model_name=args.model,
         prompt=args.prompt,
         tokenizer=tokenizer,
+        model=model,
         torch_module=torch,
         generated=generated,
         top_k=args.top_k,
+        candidate_source=args.candidate_source,
     )
 
     try:
@@ -250,9 +281,11 @@ def build_trace_from_generation(
     model_name: str,
     prompt: str,
     tokenizer: Any,
+    model: Any,
     torch_module: Any,
     generated: Any,
     top_k: int,
+    candidate_source: str,
 ) -> dict[str, Any]:
     if top_k < 1:
         raise ProbeError("--top-k must be at least 1")
@@ -271,24 +304,33 @@ def build_trace_from_generation(
     if not selected_token_ids:
         raise ProbeError("Generation returned no selected token ids")
 
+    if candidate_source == CANDIDATE_SOURCE_FORWARD_LOGITS:
+        score_vectors = forward_logit_vectors_for_generated_tokens(
+            model=model,
+            torch_module=torch_module,
+            sequence=sequence,
+            prompt_length=prompt_length,
+            generated_token_count=len(selected_token_ids),
+        )
+    elif candidate_source == CANDIDATE_SOURCE_GENERATION_SCORES:
+        score_vectors = [score_tensor[0] for score_tensor in generated.scores]
+    else:
+        raise ProbeError(f"Unsupported candidate source: {candidate_source}")
+
     candidates_by_step: list[list[dict[str, float | str]]] = []
-    for selected_token_id, score_tensor in zip(selected_token_ids, generated.scores, strict=False):
-        probabilities = torch_module.softmax(score_tensor[0], dim=-1)
-        selected_probability = scalar_to_float(probabilities[int(selected_token_id)])
-        effective_top_k = min(int(top_k), int(probabilities.numel()))
-        top_probabilities, top_indices = torch_module.topk(probabilities, effective_top_k)
-        candidates = build_candidates(
+    for selected_token_id, score_vector in zip(selected_token_ids, score_vectors, strict=False):
+        candidates = build_candidates_from_score_vector(
             tokenizer=tokenizer,
+            torch_module=torch_module,
             selected_token_id=int(selected_token_id),
-            selected_probability=selected_probability,
-            top_indices=normalise_token_id_list(top_indices),
-            top_probabilities=list(top_probabilities),
+            score_vector=score_vector,
+            top_k=top_k,
         )
         if not candidates:
             raise ProbeError("A generated step had no usable candidate alternatives")
         candidates_by_step.append(candidates)
 
-    return build_trace_payload(
+    trace = build_trace_payload(
         model=model_name,
         prompt=prompt,
         tokenizer=tokenizer,
@@ -296,6 +338,29 @@ def build_trace_from_generation(
         selected_token_ids=selected_token_ids,
         candidates_by_step=candidates_by_step,
     )
+    trace["candidate_source"] = candidate_source
+    return trace
+
+
+def forward_logit_vectors_for_generated_tokens(
+    *,
+    model: Any,
+    torch_module: Any,
+    sequence: Any,
+    prompt_length: int,
+    generated_token_count: int,
+) -> list[Any]:
+    try:
+        with torch_module.no_grad():
+            output = model(input_ids=sequence.unsqueeze(0), use_cache=False)
+    except Exception as error:
+        raise ProbeError(f"Forward logits candidate extraction failed: {error}") from error
+
+    if not hasattr(output, "logits"):
+        raise ProbeError("Forward pass did not return logits")
+
+    logits = output.logits[0]
+    return [logits[prompt_length + step_index - 1] for step_index in range(generated_token_count)]
 
 
 def normalise_token_id_list(values: Any) -> list[int]:
@@ -312,6 +377,7 @@ def print_summary(*, trace: dict[str, Any], elapsed_seconds: float) -> None:
     print(f"generated text: {generated_text_from_trace(trace)}")
     print(f"prompt tokens: {len(trace.get('prompt_tokens', []))}")
     print(f"generation steps: {len(trace.get('steps', []))}")
+    print(f"candidate source: {trace.get('candidate_source', 'unknown')}")
     print(f"elapsed seconds: {elapsed_seconds:.2f}")
     print()
     print("First generated steps:")
