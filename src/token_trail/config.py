@@ -24,6 +24,12 @@ DEFAULT_OLLAMA_TIMEOUT_SECONDS = 20.0
 DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS = 45.0
 DEFAULT_OLLAMA_KEEP_ALIVE = "30m"
 DEFAULT_OLLAMA_REASONING_RETRY_TOKENS = (("qwen3:4b", 512),)
+DEFAULT_HF_TRACE_URL = "http://127.0.0.1:8600/api/trace"
+DEFAULT_HF_TRACE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
+DEFAULT_HF_TRACE_TOP_K = 5
+DEFAULT_HF_TRACE_MAX_NEW_TOKENS = 48
+DEFAULT_HF_TRACE_TEMPERATURE = 0.3
+DEFAULT_HF_TRACE_TIMEOUT_SECONDS = 20.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,13 @@ class RuntimeConfig:
     ollama_warmup_timeout_seconds: float = DEFAULT_OLLAMA_WARMUP_TIMEOUT_SECONDS
     ollama_keep_alive: str = DEFAULT_OLLAMA_KEEP_ALIVE
     ollama_reasoning_retry_tokens: dict[str, int] | None = None
+    hf_trace_enabled: bool = False
+    hf_trace_url: str = DEFAULT_HF_TRACE_URL
+    hf_trace_model: str = DEFAULT_HF_TRACE_MODEL
+    hf_trace_top_k: int = DEFAULT_HF_TRACE_TOP_K
+    hf_trace_max_new_tokens: int = DEFAULT_HF_TRACE_MAX_NEW_TOKENS
+    hf_trace_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
+    hf_trace_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         if not self.ollama_models:
@@ -97,6 +110,19 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         vllm_base_url=get_setting("TOKEN_TRAIL_VLLM_BASE_URL", "http://127.0.0.1:8000/v1"),
         vllm_model=vllm_model,
         vllm_models=_parse_csv_setting(get_setting("TOKEN_TRAIL_VLLM_MODELS", vllm_model)),
+        hf_trace_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_HF_TRACE_ENABLED", "false")),
+        hf_trace_url=get_setting("TOKEN_TRAIL_HF_TRACE_URL", DEFAULT_HF_TRACE_URL),
+        hf_trace_model=get_setting("TOKEN_TRAIL_HF_TRACE_MODEL", DEFAULT_HF_TRACE_MODEL),
+        hf_trace_top_k=int(get_setting("TOKEN_TRAIL_HF_TRACE_TOP_K", str(DEFAULT_HF_TRACE_TOP_K))),
+        hf_trace_max_new_tokens=int(
+            get_setting("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", str(DEFAULT_HF_TRACE_MAX_NEW_TOKENS))
+        ),
+        hf_trace_temperature=float(
+            get_setting("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))
+        ),
+        hf_trace_timeout_seconds=float(
+            get_setting("TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_TIMEOUT_SECONDS))
+        ),
     )
 
 

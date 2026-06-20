@@ -3,7 +3,7 @@ from token_trail.adapters.ollama import OllamaStatus
 from token_trail.runtime import build_runtime_options, default_runtime_id, select_runtime
 
 
-def make_config(backend: str = "scripted") -> RuntimeConfig:
+def make_config(backend: str = "scripted", *, hf_trace_enabled: bool = False) -> RuntimeConfig:
     return RuntimeConfig(
         backend=backend,
         host="127.0.0.1",
@@ -15,6 +15,12 @@ def make_config(backend: str = "scripted") -> RuntimeConfig:
         vllm_base_url="http://127.0.0.1:8000/v1",
         vllm_model="Qwen/Qwen3-4B",
         vllm_models=("Qwen/Qwen3-4B",),
+        hf_trace_enabled=hf_trace_enabled,
+        hf_trace_url="http://127.0.0.1:8600/api/trace",
+        hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
+        hf_trace_top_k=5,
+        hf_trace_max_new_tokens=48,
+        hf_trace_temperature=0.3,
     )
 
 
@@ -28,6 +34,33 @@ def test_build_runtime_options_includes_scripted_and_configured_models() -> None
         "vllm:Qwen/Qwen3-4B",
     ]
     assert [option.available for option in options] == [True, True, False, False]
+
+
+def test_build_runtime_options_includes_available_hf_trace_when_enabled_and_probed() -> None:
+    options = build_runtime_options(
+        make_config(hf_trace_enabled=True),
+        ollama_status=OllamaStatus(available=False, models=()),
+        hf_trace_available=True,
+    )
+
+    hf_option = next(option for option in options if option.id == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct")
+    assert hf_option.backend == "hf-trace"
+    assert hf_option.model == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert hf_option.available
+    assert hf_option.notes == "Configured HF trace server is reachable."
+
+
+def test_build_runtime_options_omits_hf_trace_when_disabled() -> None:
+    options = build_runtime_options(make_config(hf_trace_enabled=False), hf_trace_available=True)
+
+    assert all(option.backend != "hf-trace" for option in options)
+
+
+def test_default_runtime_uses_configured_hf_trace_when_available() -> None:
+    config = make_config(backend="hf-trace", hf_trace_enabled=True)
+    options = build_runtime_options(config, hf_trace_available=True)
+
+    assert default_runtime_id(config, options) == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct"
 
 
 def test_default_runtime_uses_configured_backend_and_model() -> None:

@@ -49,6 +49,31 @@ The HF trace server should be a separate process. Token Trail must still run wit
 
 ---
 
+## Token Trail runtime contract
+
+HF trace mode is represented inside Token Trail as:
+
+```text
+backend: hf-trace
+runtime id: hf-trace:<model>
+```
+
+The first configured runtime id is:
+
+```text
+hf-trace:Qwen/Qwen2.5-1.5B-Instruct
+```
+
+Runtime selector rules:
+
+- HF trace options appear only when `TOKEN_TRAIL_HF_TRACE_ENABLED=true`.
+- The HF trace option is marked available only when a tiny configured server probe succeeds.
+- If the probe fails, the option may still be listed as unavailable, but generation must use scripted fallback.
+- Scripted trace mode remains the default and mandatory fallback.
+- Ollama remains a separate live-text mode and does not become a token-trace source.
+
+---
+
 ## HF server API
 
 ### Endpoint
@@ -62,6 +87,7 @@ POST /api/trace
 ```json
 {
   "prompt": "Write one sentence about a robot at university.",
+  "model": "Qwen/Qwen2.5-1.5B-Instruct",
   "max_new_tokens": 48,
   "top_k": 5,
   "temperature": 0.3
@@ -86,6 +112,56 @@ POST /api/trace
       "explanation": "Top returned alternatives from the local model for this token position."
     }
   ]
+}
+```
+
+The HF server response is the raw trace-shaped payload. It is not sent directly to the browser; Token Trail wraps it in its own `/api/generate-trace` response.
+
+---
+
+## Token Trail API contract
+
+Token Trail's existing endpoint remains the browser entry point:
+
+```text
+POST /api/generate-trace
+```
+
+For HF success, Token Trail returns:
+
+```json
+{
+  "mode": "hf-live-trace",
+  "runtime_id": "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
+  "fallback_used": false,
+  "trace": {
+    "mode": "hf-live-trace",
+    "model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "prompt": "Write one sentence about a robot at university.",
+    "prompt_tokens": ["Write", " one", " sentence"],
+    "steps": [
+      {
+        "selected_token": "A",
+        "candidates": [
+          {"token": "A", "probability": 0.31},
+          {"token": "The", "probability": 0.22}
+        ],
+        "explanation": "Top returned alternatives from the local model for this token position."
+      }
+    ]
+  }
+}
+```
+
+For HF failure, Token Trail returns the existing scripted fallback payload shape:
+
+```json
+{
+  "mode": "scripted-fallback",
+  "runtime_id": "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
+  "fallback_used": true,
+  "message": "Live generation unavailable",
+  "trace": {}
 }
 ```
 
@@ -144,6 +220,8 @@ TOKEN_TRAIL_HF_TRACE_URL=http://127.0.0.1:8600/api/trace
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_TOP_K=5
 TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=48
+TOKEN_TRAIL_HF_TRACE_TEMPERATURE=0.3
+TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS=20
 ```
 
 HF live trace should be disabled by default until rehearsed on the final machine.
@@ -190,13 +268,43 @@ Run a small local service on port 8600 with one `/api/trace` endpoint.
 
 Add a Token Trail-side client with timeout handling and scripted fallback on every error.
 
+Fallback conditions:
+
+- HF server unreachable.
+- HF server timeout.
+- HTTP error.
+- Invalid JSON.
+- Unexpected mode.
+- Missing prompt tokens.
+- Empty steps.
+- Missing selected token, candidates, probabilities, or explanation.
+- Unavailable `hf-trace` runtime.
+
+The browser must never wait indefinitely for HF trace generation.
+
 ### Phase E — UI integration
 
 Reuse the existing scripted replay UI for `hf-live-trace` payloads.
 
+Browser rule:
+
+- `payload.mode === "live"` remains the Ollama generated-text path.
+- `payload.mode === "hf-live-trace"` assigns `payload.trace` to `currentTrace`, resets replay state, shows a short live-trace notice, and starts the existing token replay animation.
+- Any other non-scripted response uses scripted fallback.
+
 ### Phase F — Rehearsal and go/no-go
 
 Use HF live trace only if it starts cleanly, generates a trace, replays cleanly, and falls back instantly when the server is stopped.
+
+---
+
+## Prompt policy
+
+Phase 5 uses only the selected curated trace prompt as the HF prompt.
+
+Do not send visitor-edited free text to the HF trace server for Open Day.
+
+Free-text HF prompts are out of scope unless a later phase explicitly enables them with staff controls and fallback rehearsal.
 
 ---
 

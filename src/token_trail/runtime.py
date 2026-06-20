@@ -43,7 +43,11 @@ class RuntimeState:
         }
 
 
-def build_runtime_options(config: RuntimeConfig, ollama_status: OllamaStatus | None = None) -> list[RuntimeOption]:
+def build_runtime_options(
+    config: RuntimeConfig,
+    ollama_status: OllamaStatus | None = None,
+    hf_trace_available: bool = False,
+) -> list[RuntimeOption]:
     """Build selectable runtime options from config.
 
     Ollama and vLLM options are listed from configuration. Ollama options are
@@ -96,6 +100,23 @@ def build_runtime_options(config: RuntimeConfig, ollama_status: OllamaStatus | N
             )
         )
 
+    if config.hf_trace_enabled:
+        notes = (
+            "Configured HF trace server is reachable."
+            if hf_trace_available
+            else "Configured HF trace server is unavailable; scripted fallback remains available."
+        )
+        options.append(
+            RuntimeOption(
+                id=f"hf-trace:{config.hf_trace_model}",
+                label=f"HF trace · {config.hf_trace_model}",
+                backend="hf-trace",
+                model=config.hf_trace_model,
+                available=hf_trace_available,
+                notes=notes,
+            )
+        )
+
     return options
 
 
@@ -107,6 +128,7 @@ def default_runtime_id(config: RuntimeConfig, options: list[RuntimeOption]) -> s
         "scripted": None,
         "ollama": config.ollama_model,
         "vllm": config.vllm_model,
+        "hf-trace": config.hf_trace_model,
     }.get(configured_backend)
 
     for option in options:

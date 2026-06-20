@@ -32,6 +32,13 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
         "TOKEN_TRAIL_VLLM_BASE_URL",
         "TOKEN_TRAIL_VLLM_MODEL",
         "TOKEN_TRAIL_VLLM_MODELS",
+        "TOKEN_TRAIL_HF_TRACE_ENABLED",
+        "TOKEN_TRAIL_HF_TRACE_URL",
+        "TOKEN_TRAIL_HF_TRACE_MODEL",
+        "TOKEN_TRAIL_HF_TRACE_TOP_K",
+        "TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS",
+        "TOKEN_TRAIL_HF_TRACE_TEMPERATURE",
+        "TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -54,6 +61,13 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.vllm_base_url == "http://127.0.0.1:8000/v1"
     assert config.vllm_model == "Qwen/Qwen3-4B"
     assert config.vllm_models == ("Qwen/Qwen3-4B",)
+    assert config.hf_trace_enabled is False
+    assert config.hf_trace_url == "http://127.0.0.1:8600/api/trace"
+    assert config.hf_trace_model == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert config.hf_trace_top_k == 5
+    assert config.hf_trace_max_new_tokens == 48
+    assert config.hf_trace_temperature == 0.3
+    assert config.hf_trace_timeout_seconds == 20.0
 
 
 def test_config_reads_environment_overrides(monkeypatch) -> None:
@@ -69,6 +83,13 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_WARMUP_TIMEOUT_SECONDS", "30.5")
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_KEEP_ALIVE", "10m")
     monkeypatch.setenv("TOKEN_TRAIL_OLLAMA_REASONING_RETRY_TOKENS", "qwen3:4b=384, qwen3:1.7b=0, bad, nope=x")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_ENABLED", "true")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_URL", "http://127.0.0.1:8700/api/trace")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TOP_K", "3")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", "24")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", "0.1")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS", "6.5")
 
     config = load_config(env_file=None)
 
@@ -84,6 +105,13 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.ollama_warmup_timeout_seconds == 30.5
     assert config.ollama_keep_alive == "10m"
     assert config.ollama_reasoning_retry_tokens == {"qwen3:4b": 384}
+    assert config.hf_trace_enabled is True
+    assert config.hf_trace_url == "http://127.0.0.1:8700/api/trace"
+    assert config.hf_trace_model == "Qwen/Qwen2.5-0.5B-Instruct"
+    assert config.hf_trace_top_k == 3
+    assert config.hf_trace_max_new_tokens == 24
+    assert config.hf_trace_temperature == 0.1
+    assert config.hf_trace_timeout_seconds == 6.5
 
 
 def test_config_reads_env_file(monkeypatch) -> None:

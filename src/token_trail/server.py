@@ -11,6 +11,7 @@ from pathlib import Path
 from urllib.parse import unquote
 
 from token_trail.adapters.base import AdapterError
+from token_trail.adapters.hf_trace import HfTraceAdapter, HfTraceStatus, validate_trace_payload
 from token_trail.adapters.ollama import OllamaAdapter, OllamaStatus
 from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, load_config
 from token_trail.config import RuntimeConfig
@@ -30,6 +31,8 @@ class ServerState:
     runtime_state: RuntimeState
     ollama_status: OllamaStatus
     ollama_adapter: OllamaAdapter
+    hf_trace_status: HfTraceStatus
+    hf_trace_adapter: HfTraceAdapter
 
 
 class TokenTrailServer(ThreadingHTTPServer):
@@ -40,12 +43,32 @@ class TokenTrailServer(ThreadingHTTPServer):
         self.state = state
 
 
-def build_server_state(config: RuntimeConfig, ollama_adapter: OllamaAdapter | None = None) -> ServerState:
+def build_server_state(
+    config: RuntimeConfig,
+    ollama_adapter: OllamaAdapter | None = None,
+    hf_trace_adapter: HfTraceAdapter | None = None,
+) -> ServerState:
     """Build runtime state at startup without doing work at import time."""
 
     adapter = ollama_adapter or OllamaAdapter(config.ollama_base_url)
     ollama_status = adapter.status()
-    runtime_options = build_runtime_options(config, ollama_status=ollama_status)
+    trace_adapter = hf_trace_adapter or HfTraceAdapter(config.hf_trace_url)
+    hf_trace_status = (
+        trace_adapter.status(
+            model=config.hf_trace_model,
+            max_new_tokens=1,
+            top_k=1,
+            temperature=0,
+            timeout_seconds=min(config.hf_trace_timeout_seconds, 2.0),
+        )
+        if config.hf_trace_enabled
+        else HfTraceStatus(available=False)
+    )
+    runtime_options = build_runtime_options(
+        config,
+        ollama_status=ollama_status,
+        hf_trace_available=hf_trace_status.available,
+    )
     runtime_state = RuntimeState(selected_id=default_runtime_id(config, runtime_options))
     return ServerState(
         config=config,
@@ -53,6 +76,8 @@ def build_server_state(config: RuntimeConfig, ollama_adapter: OllamaAdapter | No
         runtime_state=runtime_state,
         ollama_status=ollama_status,
         ollama_adapter=adapter,
+        hf_trace_status=hf_trace_status,
+        hf_trace_adapter=trace_adapter,
     )
 
 
@@ -230,6 +255,31 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     "runtime_id": runtime_id,
                     "fallback_used": False,
                     "generated_text": generated_text,
+                }
+            )
+            return
+
+        if runtime.backend == "hf-trace" and runtime.available and runtime.model:
+            try:
+                hf_trace = state.hf_trace_adapter.generate_trace(
+                    prompt=trace.prompt,
+                    model=runtime.model,
+                    max_new_tokens=state.config.hf_trace_max_new_tokens,
+                    top_k=state.config.hf_trace_top_k,
+                    temperature=state.config.hf_trace_temperature,
+                    timeout_seconds=state.config.hf_trace_timeout_seconds,
+                )
+                validate_trace_payload(hf_trace)
+            except AdapterError:
+                self._send_json(_scripted_fallback_payload(runtime_id, trace))
+                return
+
+            self._send_json(
+                {
+                    "mode": "hf-live-trace",
+                    "runtime_id": runtime_id,
+                    "fallback_used": False,
+                    "trace": hf_trace,
                 }
             )
             return

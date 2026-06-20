@@ -285,6 +285,17 @@ function showLiveGeneration(payload) {
   updatePlayButton();
 }
 
+function showHfLiveTrace(payload) {
+  if (payload.trace) {
+    currentTrace = payload.trace;
+  }
+  resetDemo();
+  resetPromptToTrace();
+  runNotice = "HF live trace — top returned alternatives from the local model";
+  explanation.textContent = runNotice;
+  startPreparedTrail();
+}
+
 function loadFallbackTrace(payload) {
   if (payload.trace) {
     currentTrace = payload.trace;
@@ -307,6 +318,8 @@ async function startDemo() {
       const payload = await generateTrace();
       if (payload.mode === "live") {
         showLiveGeneration(payload);
+      } else if (payload.mode === "hf-live-trace") {
+        showHfLiveTrace(payload);
       } else {
         loadFallbackTrace(payload);
       }
