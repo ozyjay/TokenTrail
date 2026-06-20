@@ -47,11 +47,13 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 
 ## Live Runtime UX
 
-- Scripted mode remains the guaranteed fallback and should keep curated prompts static.
+- HF trace is the primary/default live token-trace backend when healthy.
+- Scripted mode remains the mandatory fallback and secondary prepared mode, and should keep curated prompts static.
 - Resetting or switching into scripted mode must re-render the curated prompt view, hide the prompt editor, and restore the selected prepared trace.
 - Available HF trace runtimes should expose an editable prompt box.
 - HF trace mode returns replayable `hf-live-trace` data with model-tokenised `prompt_tokens`; after generation, show those returned tokens rather than word-split preview tokens.
-- HF traces should finish at a complete sentence or fall back to scripted mode.
+- HF traces should finish at a complete sentence or fall back to scripted mode if HF trace fails, is too slow, or is not ready.
+- Public wording should describe candidate bars as top returned alternatives from the local model, not private reasoning.
 - The generated output area should use available horizontal browser space and avoid forcing page-level scrolling for normal live output.
 - Do not store visitor prompts or generated responses by default.
 

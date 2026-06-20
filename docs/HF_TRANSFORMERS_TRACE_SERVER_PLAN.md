@@ -1,6 +1,6 @@
 # HF Transformers Trace Server Plan
 
-CLI probe implemented for the supported live-token trace path.
+CLI probe implemented for the primary HF trace backend and default live token-trace path.
 
 ## Contract
 
@@ -11,9 +11,9 @@ The trace server returns Token Trail JSON with:
 - `prompt`;
 - `prompt_tokens`;
 - generated `steps`;
-- `candidates` and `explanation` for each step.
+- top returned `candidates` and `explanation` for each step.
 
-Token Trail validates the payload before replay. If validation fails or the generation does not reach a complete sentence after at least eight generated steps, the main server returns scripted fallback.
+Token Trail validates the payload before replay. Normal operation is to replay HF traces when the server is healthy and the selected model returns clean output. If validation fails, generation is too slow, the server is not ready, or the generation does not reach a complete sentence after at least eight generated steps, the main server returns the scripted prepared fallback. The candidate list represents token alternatives returned by the local model, not private reasoning.
 
 ## Configuration
 

@@ -4,10 +4,10 @@
 
 Token Trail has two runtime families:
 
-- scripted prepared traces;
-- HF live token traces.
+- HF live token traces as the primary backend;
+- scripted prepared traces as the mandatory fallback and secondary prepared mode.
 
-Scripted traces remain the guaranteed public-demo fallback. HF trace mode is the live path for staff-entered prompts, real prompt tokens, generated token candidates, and replayable probability bars.
+HF trace mode is the default live token-trace backend for staff-entered prompts, real prompt tokens, generated token candidates, and replayable probability bars. Scripted prepared traces remain the guaranteed public-demo fallback when HF trace is slow, unavailable, not ready, or confusing.
 
 ## Near-Term Polish
 
@@ -16,6 +16,7 @@ Scripted traces remain the guaranteed public-demo fallback. HF trace mode is the
 - Keep scripted reset behaviour strict: no prompt editor, selected curated prompt restored, prepared trace replayed.
 - Treat incomplete HF generations as fallback events rather than replaying cut-off text.
 - Keep docs, tests, and config aligned with the two supported runtime families.
+- Keep public wording clear that candidates are top returned alternatives from a local model, not private reasoning.
 
 ## Validation
 

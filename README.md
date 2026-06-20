@@ -2,16 +2,16 @@
 
 Token Trail is a local Open Day demo that shows text generation one token at a time. Visitors choose a curated prompt, then watch prompt tokens, next-token candidates, probabilities, and generated text build up as a replayable trail.
 
-Current app status: **scripted fallback traces plus optional Hugging Face Transformers live token traces**. Scripted traces are always available. HF trace mode lets staff enter a custom prompt and replays real prompt tokens, generated tokens, candidates, and probabilities returned by the local HF trace server.
+Current app status: **primary Hugging Face Transformers live token traces with scripted prepared traces as the guaranteed fallback.** HF trace mode lets staff enter a custom prompt and replays real prompt tokens, generated tokens, top returned alternatives, and probabilities from the local HF trace server. Scripted prepared traces remain mandatory for public reliability when HF trace is not ready, too slow, or fails.
 
 ## Runtime Families
 
 | Runtime | Purpose | Status |
 | --- | --- | --- |
-| `scripted:prepared-traces` | Guaranteed local teaching path | Always available |
-| `hf-trace:<model>` | Live replayable token traces from the local HF trace server | Available when enabled and healthy |
+| `hf-trace:<model>` | Default live token-trace backend from the local HF trace server | Primary when enabled and healthy |
+| `scripted:prepared-traces` | Guaranteed scripted fallback and secondary prepared mode | Always available |
 
-The browser UI exposes only these runtime families. If an HF trace cannot complete a sentence, Token Trail falls back to the scripted trace for that prompt.
+The browser UI exposes only these runtime families. Normal operation is to run HF trace when healthy, then fall back to scripted prepared traces if HF trace fails, is too slow, is not ready, or cannot complete a sentence. The candidates shown are returned token alternatives from the local model, not private reasoning.
 
 ## Setup
 

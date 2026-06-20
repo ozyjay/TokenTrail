@@ -1,14 +1,15 @@
 # SLM Live Trace Plan
 
-The supported live small-language-model path is the local Hugging Face Transformers trace server. It returns the same replayable structure as scripted traces, with real prompt tokens, generated tokens, candidate alternatives, and probabilities.
+The supported live small-language-model path is the primary local Hugging Face Transformers trace server. It returns the same replayable structure as scripted traces, with real prompt tokens, generated tokens, top returned candidate alternatives, and probabilities.
 
 ## Behaviour
 
 - HF trace mode accepts staff-entered prompts.
-- Scripted mode never accepts staff-entered prompts; reset and runtime switching should restore the curated prompt view.
+- Scripted mode is the mandatory fallback and secondary prepared mode. It never accepts staff-entered prompts; reset and runtime switching should restore the curated prompt view.
 - Generated traces replay at the selected browser speed.
 - The trace server trims to the first complete sentence after at least eight generated steps.
-- Incomplete traces fail closed so Token Trail can show the scripted fallback payload.
+- Incomplete, slow, unavailable, or not-ready HF traces fail closed so Token Trail can show the scripted prepared fallback payload.
+- Public wording should describe candidates as local model token alternatives, not private reasoning.
 
 ## Commands
 
