@@ -10,7 +10,7 @@
 
 Implement live **text** generation through Ollama while preserving scripted traces as the guaranteed fallback.
 
-Ollama is no longer the preferred planned path for replayable live token traces. The preferred planned live-trace path is now the custom Hugging Face Transformers trace server described in:
+Ollama is no longer the preferred path for replayable live token traces. The optional live-trace path is now the custom Hugging Face Transformers trace server described in:
 
 ```text
 docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md
@@ -51,7 +51,7 @@ runtime_id + trace_id + optional live prompt
 ### Included
 
 - Curated prompt to Ollama generation.
-- Optional staff-edited prompt for available Ollama runtimes.
+- Optional staff-edited prompt for available Ollama runtimes. The same live prompt editor is also used by HF trace mode.
 - Runtime-selected Ollama model.
 - Live generation endpoint.
 - Graceful fallback to scripted traces.

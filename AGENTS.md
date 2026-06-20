@@ -43,3 +43,12 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 
 - `--candidate-source forward-logits` is the default probe mode and should stay the documented path for local validation.
 - Use `--candidate-source generation-scores` only for comparison or debugging of processed generation scores.
+
+## Live Runtime UX
+
+- Scripted mode remains the guaranteed fallback and should keep curated prompts static.
+- Available non-scripted runtimes should expose an editable prompt box.
+- Ollama live mode returns paragraph text, not token replay data.
+- HF trace mode returns replayable `hf-live-trace` data with model-tokenised `prompt_tokens`; after generation, show those returned tokens rather than word-split preview tokens.
+- The generated output area should use available horizontal browser space and avoid forcing page-level scrolling for normal live output.
+- Do not store visitor prompts or generated responses by default.

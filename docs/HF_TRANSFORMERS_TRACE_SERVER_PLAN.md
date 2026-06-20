@@ -1,14 +1,14 @@
 # Hugging Face Transformers Trace Server Plan
 
 **Project:** Token Trail  
-**Status:** Preferred planned path for SLM live trace  
+**Status:** Optional SLM live trace path implemented; rehearsal-gated  
 **Last updated:** 2026-06-20
 
 ---
 
 ## Goal
 
-Build an optional local Hugging Face Transformers trace server that returns Token Trail-shaped trace JSON from a small local language model.
+Build and maintain an optional local Hugging Face Transformers trace server that returns Token Trail-shaped trace JSON from a small local language model.
 
 This replaces the earlier Ollama/vLLM-first live-trace direction.
 
@@ -18,7 +18,7 @@ Current backend roles:
 |---|---|
 | Scripted traces | Mandatory fallback and primary teaching mode |
 | Ollama | Simple local live text mode |
-| Hugging Face Transformers server | Preferred planned path for live token traces |
+| Hugging Face Transformers server | Optional path for live token traces |
 | vLLM | Stretch/deferred desktop experiment |
 
 ---
@@ -275,9 +275,13 @@ Add helpers for score-to-candidate conversion and trace construction.
 
 Run a small local service on port 8600 with one `/api/trace` endpoint.
 
+Implemented as `scripts/serve_hf_trace.py` and launched via `scripts/serve_hf_trace.ps1` or automatically from `scripts/run.ps1` when HF trace mode is enabled.
+
 ### Phase D — Token Trail client
 
 Add a Token Trail-side client with timeout handling and scripted fallback on every error.
+
+Implemented in `src/token_trail/adapters/hf_trace.py` and `src/token_trail/server.py`.
 
 Fallback conditions:
 
@@ -302,6 +306,8 @@ Browser rule:
 - `payload.mode === "live"` remains the Ollama generated-text path.
 - `payload.mode === "hf-live-trace"` assigns `payload.trace` to `currentTrace`, resets replay state, shows a short live-trace notice, and starts the existing token replay animation.
 - Any other non-scripted response uses scripted fallback.
+- Available HF trace runtimes show the editable prompt input.
+- After the trace returns, the prompt token row displays the HF server's `prompt_tokens`.
 
 ### Phase F — Rehearsal and go/no-go
 
@@ -311,11 +317,9 @@ Use HF live trace only if it starts cleanly, generates a trace, replays cleanly,
 
 ## Prompt policy
 
-Phase 5 uses only the selected curated trace prompt as the HF prompt.
+HF trace mode uses the current prompt in the live prompt editor. The input is capped by the browser and server sanitisation path, is not stored by default, and falls back to the selected curated prompt if empty.
 
-Do not send visitor-edited free text to the HF trace server for Open Day.
-
-Free-text HF prompts are out of scope unless a later phase explicitly enables them with staff controls and fallback rehearsal.
+For public operation, use this only as a supervised staff-controlled prompt, not unsupervised visitor free text.
 
 ---
 

@@ -4,6 +4,25 @@ This file records local setup or test issues found while running Token Trail on 
 
 ---
 
+## 2026-06-20 — Wide live output, editable HF prompts, and real prompt tokens
+
+**Status:** implemented locally
+
+**Context:** Browser rehearsal showed the generated text needed more horizontal space, and HF trace mode needed to demonstrate the model's real prompt tokenisation instead of the temporary word-split preview.
+
+**Fix captured in repo:**
+
+- The app shell now uses more browser width.
+- The generated-text panel spans more of the main grid, and live generated text no longer has the narrow reading-width cap.
+- Available non-scripted runtimes now show an editable prompt box.
+- HF live trace requests send the current edited prompt to the local trace server.
+- After HF trace generation returns, the prompt token row uses the returned `prompt_tokens` from the HF tokenizer.
+- Scripted mode remains curated and non-editable, and scripted fallback remains mandatory.
+
+**Follow-up:** In a real browser, select HF trace mode, edit the prompt, generate a trail, and confirm the prompt token row changes to tokenizer-style pieces such as leading-space tokens. Confirm the generated text area uses the wider layout without page-level scrolling for normal live output.
+
+---
+
 ## 2026-06-20 — Editable live prompt and extra scripted traces
 
 **Status:** implemented locally

@@ -2,7 +2,7 @@
 
 **Token Trail** is an Open Day demo that shows how a language model generates text one token at a time.
 
-Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. Scripted traces remain the guaranteed teaching mode. Ollama can optionally provide short live text generation. A custom Hugging Face Transformers trace server is the preferred planned path for future live token traces.
+Visitors choose a curated prompt, then watch the system break the prompt into tokens, predict possible next tokens, select one, and repeat. Scripted traces remain the guaranteed teaching mode. Available live runtimes let staff edit the prompt for supervised demos. Ollama can provide short live text generation, and the optional Hugging Face Transformers trace server can return replayable live token traces with real model prompt tokens.
 
 > Public tagline: **Watch a language model predict text one token at a time.**
 
@@ -10,7 +10,7 @@ Visitors choose a curated prompt, then watch the system break the prompt into to
 
 ## Current status
 
-Current app status: **scripted MVP with optional Ollama live text, warm-up, live-mode layout polish, and three prepared traces**.
+Current app status: **scripted MVP with optional Ollama live text, optional HF live token traces, warm-up, wide live-output layout polish, editable live prompts, and three prepared traces**.
 
 The current app:
 
@@ -20,6 +20,9 @@ The current app:
 - serves a big-screen UI from `web/`;
 - uses scripted token traces from `src/token_trail/traces.py`;
 - can optionally use a local Ollama model for short live text generation;
+- can optionally use a local HF trace server for replayable token traces with model-tokenised prompt tokens;
+- allows prompt editing for available non-scripted runtimes;
+- uses a wider live-output layout so generated text has more horizontal reading space;
 - keeps scripted fallback prompts curated and static;
 - includes tests for traces, config, docs, adapters, server routes, and project setup;
 - uses PowerShell scripts for local setup, testing, port checks, and launch.
@@ -34,10 +37,10 @@ Scripted mode remains the guaranteed fallback for Open Day.
 |---|---|---|
 | Scripted traces | Mandatory fallback and primary teaching mode | Required |
 | Ollama | Simple local live text generation | Working optional path |
-| Custom Hugging Face Transformers trace server | Planned live token-trace path | Preferred next spike |
+| Custom Hugging Face Transformers trace server | Optional live token-trace path using generated token IDs and scores | Working optional path, rehearsal-gated |
 | vLLM | Desktop/GPU experiment if needed | Stretch/deferred |
 
-The HF trace server is **not implemented yet**. It is planned as a separate local service on the reserved model-adapter port.
+The HF trace server runs as a separate optional local service on the reserved model-adapter port. It is useful for rehearsal and supervised demos, but scripted mode remains the booth-safe fallback.
 
 ---
 
@@ -79,7 +82,7 @@ tests/
 - Poetry
 - PowerShell 7+
 - Optional: Ollama for local live text generation
-- Planned only: Hugging Face Transformers/PyTorch for future live trace server
+- Optional: Hugging Face Transformers/PyTorch for the local HF live trace server
 
 For the Framework Desktop and final rehearsal, use the pinned Python version:
 
@@ -98,7 +101,7 @@ python --version
 | Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current app |
 | Health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
 | Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later split |
-| HF trace server / model adapter | `http://127.0.0.1:8600` | Planned live trace server |
+| HF trace server / model adapter | `http://127.0.0.1:8600` | Optional live trace server |
 | Ollama | `http://127.0.0.1:11434` | External runtime for live text |
 | vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | Stretch/deferred; Token Trail itself must not use 8000 |
 
@@ -123,7 +126,7 @@ Then open:
 http://127.0.0.1:3100
 ```
 
-### Optional HF trace probe
+### Optional HF trace probe and server
 
 The Hugging Face trace probe uses an optional Poetry group so the main scripted demo stays lightweight. The wrapper installs that group before running the probe:
 
@@ -133,7 +136,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Ins
 
 `--candidate-source forward-logits` is the default and preferred probe mode. It runs a second model pass over the generated sequence so the trace includes useful token alternatives. Use `--candidate-source generation-scores` only when comparing against the raw processed generation scores.
 
-When `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`, the normal run script starts the HF trace server, warms the configured model, then starts Token Trail:
+When `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`, the normal run script starts the HF trace server, warms the configured model, then starts Token Trail. In this mode the prompt is editable, and the returned trace includes the HF tokenizer's prompt tokens:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/run.ps1
@@ -145,7 +148,7 @@ For manual debugging, the HF trace server can still be started in a separate ter
 pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --host 127.0.0.1 --port 8600
 ```
 
-If the server is stopped or fails to return a valid trace, Token Trail keeps using the scripted fallback.
+If the server is stopped, times out, or fails to return a valid trace, Token Trail keeps using the scripted fallback.
 
 If you prefer to install the optional group separately:
 
@@ -189,7 +192,7 @@ TOKEN_TRAIL_OLLAMA_DISABLE_THINKING=true
 TOKEN_TRAIL_OLLAMA_WARMUP_ENABLED=true
 ```
 
-HF trace settings should only be added after the standalone HF trace server spike succeeds.
+HF trace settings are optional and should be enabled only on machines where the local server has been rehearsed.
 
 ```text
 TOKEN_TRAIL_BACKEND=hf-trace
@@ -198,7 +201,7 @@ TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 # TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 ```
 
-`TOKEN_TRAIL_HF_TRACE_MODEL` sets the initial HF trace runtime. `config/models.json` lists the HF trace models shown in the runtime selector; `TOKEN_TRAIL_HF_TRACE_MODELS` is still available as a direct comma-separated override.
+`TOKEN_TRAIL_HF_TRACE_MODEL` sets the initial HF trace runtime. `config/models.json` lists the HF trace models shown in the runtime selector; `TOKEN_TRAIL_HF_TRACE_MODELS` is still available as a direct comma-separated override. HF trace generation sends the current edited prompt to the local trace server and displays the server-returned `prompt_tokens`.
 
 ---
 

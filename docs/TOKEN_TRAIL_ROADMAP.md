@@ -15,7 +15,7 @@ Token Trail should explain language-model generation clearly, visibly, and hones
 ```text
 Primary teaching mode: scripted token trail
 Optional live mode: local Ollama text generation
-Planned educational upgrade: custom HF Transformers live trace server
+Optional educational upgrade: custom HF Transformers live trace server
 Mandatory fallback: prepared trace replay
 ```
 
@@ -31,9 +31,12 @@ Token Trail currently has:
 - runtime selector;
 - Ollama model discovery;
 - optional live local text generation;
+- optional HF live token traces;
 - warm-up path for available local Ollama runtimes;
-- live-mode paragraph layout;
+- editable prompts for available non-scripted runtimes;
+- wide live-mode paragraph layout;
 - scripted fallback for failed live generation;
+- model-tokenised prompt tokens for returned HF live traces;
 - three prepared scripted traces;
 - environment-driven configuration;
 - launch and test scripts;
@@ -44,7 +47,7 @@ Recent backend decisions:
 - Ollama remains the simple live text path.
 - Ollama logprob probing did not produce usable live trace data on the tested Qwen3 models.
 - vLLM remains a stretch/deferred desktop experiment because it is heavier than needed for the local laptop workflow.
-- A custom HF Transformers trace server is now the preferred planned path for replayable SLM token trails.
+- A custom HF Transformers trace server is now the preferred optional path for replayable SLM token trails.
 
 ---
 
@@ -56,8 +59,8 @@ Recent backend decisions:
 | 1 | Scripted visual MVP | Mostly done | Public-facing token trail without live model dependency |
 | 2 | Ollama live text generation | Working, needs polish | Runtime-selected local model can generate short text |
 | 3 | Warm-up and reliability | Done | Model is warmed before visitor interaction |
-| 4 | Live-mode UI polish | Basic pass done | Live output is readable and clearly labelled |
-| 5 | HF Transformers live trace server | Planned / spike next | Convert local model scores into replayable token trails |
+| 4 | Live-mode UI polish | Improved pass done | Live output is readable, wider, and clearly labelled |
+| 5 | HF Transformers live trace server | Working optional path | Convert local model scores into replayable token trails |
 | 6 | Open Day hardening | Final rehearsal phase | Staff-ready, resettable, reliable booth demo |
 
 ---
@@ -194,6 +197,7 @@ Basic pass done.
 
 - Different layout for live text than scripted token animation.
 - Live output treated as paragraph text.
+- Wider generated-text panel that uses more browser width.
 - Clear live-mode explanation.
 - Candidate-token panel replaced with an honest live-mode placeholder.
 - Scripted trace UI preserved for the teaching mode.
@@ -212,7 +216,7 @@ Improve the teaching value by turning a local model response into a replayable t
 
 ### Status
 
-Planned / spike next.
+Working optional path; rehearsal-gated.
 
 ### Supporting docs
 
@@ -224,11 +228,12 @@ docs/SLM_LIVE_TRACE_PLAN.md
 ### Target behaviour
 
 ```text
-curated prompt
+editable live prompt
   -> local HF trace server on port 8600
   -> generate with return_dict_in_generate=True and output_scores=True
   -> convert generated token IDs and top returned alternatives into trace steps
   -> replay using the existing token trail animation
+  -> show returned model-tokenised prompt tokens
 ```
 
 ### Constraints
@@ -238,11 +243,11 @@ curated prompt
 - Do not claim top returned alternatives are every possible next token.
 - Do not require HF live trace for Open Day.
 - Keep scripted fallback mandatory.
-- Feature-gate this until proven on the final machine.
+- Keep this optional until proven on the final machine.
 
 ### First tiny step
 
-Run a standalone HF trace server spike. Continue only if a small model returns trace-shaped JSON with non-empty steps in acceptable time on the target machine.
+Run the HF trace server through the normal launch path. Continue only if a small model returns trace-shaped JSON with non-empty steps in acceptable time on the target machine.
 
 ### Go/no-go
 
@@ -319,14 +324,14 @@ Do not prioritise these until the core demo is stable:
 ### Next small implementation step
 
 ```text
-Run Phase A — standalone HF trace server spike from docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md.
+Rehearse HF trace mode through scripts/run.ps1 on the target machine.
 ```
 
 ### Then
 
 ```text
-If the spike succeeds, add pure trace conversion helpers and tests.
-If the spike fails, keep HF live trace disabled and continue Open Day hardening.
+If rehearsal succeeds, keep HF live trace available for supervised demos.
+If rehearsal fails, keep HF live trace disabled and continue Open Day hardening.
 ```
 
 ### Always preserve

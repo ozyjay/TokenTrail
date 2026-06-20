@@ -44,11 +44,11 @@ Local model ready
 ```
 
 3. Confirm **Generate live trail** is disabled only while warming.
-4. Confirm the prompt appears in an editable text box if live prompt editing is enabled.
+4. Confirm the prompt appears in an editable text box.
 5. Optionally make a short safe edit to the prompt.
 6. Click **Generate live trail**.
 7. Confirm the generated text is readable in paragraph form.
-8. Confirm longer live text does not get cut off at the bottom of the generated panel.
+8. Confirm longer live text uses the wide generated-text area and does not force page-level scrolling.
 9. Confirm the candidate panel says:
 
 ```text
@@ -56,11 +56,11 @@ Live local model response
 Prepared token probabilities are shown in scripted mode.
 ```
 
-## Planned HF Live Trace Check
+## HF Live Trace Check
 
 HF live trace is not a required booth dependency yet.
 
-Only run this check if the custom Hugging Face Transformers trace server has been implemented and rehearsed.
+Only run this check if the custom Hugging Face Transformers trace server has been rehearsed on the demo machine.
 
 Expected local service:
 
@@ -71,10 +71,13 @@ http://127.0.0.1:8600/api/trace
 Verify:
 
 1. HF trace server starts cleanly.
-2. One short trace request succeeds.
-3. The generated trace replays through the Token Trail animation.
-4. Candidate bars are labelled as top returned alternatives.
-5. Stopping the HF server causes Token Trail to fall back to scripted mode.
+2. The selected HF runtime shows an editable prompt box.
+3. Make a short safe edit to the prompt.
+4. One short trace request succeeds.
+5. The generated trace replays through the Token Trail animation.
+6. The prompt token row updates to the model-tokenised tokens returned by the HF trace server.
+7. Candidate bars are labelled as top returned alternatives.
+8. Stopping the HF server causes Token Trail to fall back to scripted mode.
 
 If any of these fail, leave HF live trace disabled.
 

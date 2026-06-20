@@ -1,6 +1,6 @@
 # Model Backends
 
-**Status:** Updated for HF Transformers trace-server pivot  
+**Status:** Updated for optional HF Transformers trace server  
 **Last updated:** 2026-06-20
 
 Token Trail starts with scripted traces. Live model support should remain optional and should be added only when it improves the public explanation without weakening fallback reliability.
@@ -13,7 +13,7 @@ Token Trail starts with scripted traces. Live model support should remain option
 |---|---|---|---|
 | 1 | Scripted traces | Guaranteed fallback and primary teaching mode | Required |
 | 2 | Ollama | Simple local live text generation | Working path |
-| 3 | Custom Hugging Face Transformers trace server | Planned live token-trace path using generated token IDs and scores | Preferred next spike |
+| 3 | Custom Hugging Face Transformers trace server | Optional live token-trace path using generated token IDs and scores | Working optional path, rehearsal-gated |
 | 4 | vLLM | Optional desktop/GPU experiment if HF trace server is too slow | Stretch/deferred |
 
 ---
@@ -25,7 +25,7 @@ Use this architecture:
 ```text
 Scripted fallback: always available
 Ollama: optional live text mode
-HF Transformers trace server: preferred planned live token-trace mode
+HF Transformers trace server: optional live token-trace mode
 vLLM: stretch/deferred
 ```
 
@@ -53,7 +53,7 @@ Use whichever is more reliable on the final machine. Ollama is for short live te
 
 ## Recommended first trace-server models
 
-For the custom HF trace-server spike, start smaller than the Ollama live text path:
+For the custom HF trace server, start smaller than the Ollama live text path:
 
 ```text
 Qwen/Qwen2.5-0.5B-Instruct
@@ -74,7 +74,7 @@ Token Trail follows the Open Day fixed local service map.
 | Token Trail scripted/kiosk app | `http://127.0.0.1:3100` | Current single-process app |
 | Token Trail health check | `http://127.0.0.1:3100/health` | Staff/launcher readiness check |
 | Future Token Trail backend/API | `http://127.0.0.1:8100` | Reserved for later frontend/backend split |
-| HF trace server / shared model adapter | `http://127.0.0.1:8600` | Preferred planned live trace adapter |
+| HF trace server / shared model adapter | `http://127.0.0.1:8600` | Optional live trace adapter |
 | Ollama | `http://127.0.0.1:11434` | External model runtime for live text |
 | vLLM OpenAI-compatible server | `http://127.0.0.1:8000/v1` | Stretch/deferred; Token Trail itself must not use 8000 |
 
@@ -114,6 +114,8 @@ A custom HF trace server can directly return the display shape Token Trail needs
 ```
 
 This is simpler for Token Trail than trying to force Ollama or vLLM into the exact teaching format.
+
+HF trace mode accepts the current edited live prompt from the Token Trail UI. After generation, the UI should display the HF server's returned `prompt_tokens`, because those are model-tokenised pieces rather than the temporary word-split preview used while typing.
 
 ---
 

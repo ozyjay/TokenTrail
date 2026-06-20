@@ -85,7 +85,7 @@ http://127.0.0.1:3100/health
 
 The default setup installs only the dependencies needed for scripted mode, tests, and the local app.
 
-Install the optional Hugging Face trace-probe dependencies only when you are deliberately testing the planned HF live trace path. The wrapper installs the optional group before running the probe:
+Install the optional Hugging Face trace dependencies only when you are deliberately testing the HF live trace path. The wrapper installs the optional group before running the probe:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model Qwen/Qwen2.5-0.5B-Instruct --max-new-tokens 24 --top-k 5 --candidate-source forward-logits
@@ -100,7 +100,7 @@ PYTHONPATH=src poetry run python scripts/probe_hf_trace.py --model Qwen/Qwen2.5-
 
 `--candidate-source forward-logits` is the default probe mode. It performs a second forward pass over the generated sequence and gives more useful candidate alternatives than `--candidate-source generation-scores`, which is kept for comparison and debugging.
 
-Keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` unless the probe is reliable on the target machine.
+Keep `TOKEN_TRAIL_HF_TRACE_ENABLED=false` unless the probe and server are reliable on the target machine.
 
 ---
 
@@ -132,6 +132,13 @@ TOKEN_TRAIL_OLLAMA_MODEL=qwen3:4b
 ```
 
 ```text
+TOKEN_TRAIL_BACKEND=hf-trace
+TOKEN_TRAIL_HF_TRACE_ENABLED=true
+TOKEN_TRAIL_HF_TRACE_URL=http://127.0.0.1:8600/api/trace
+TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-0.5B-Instruct
+```
+
+```text
 TOKEN_TRAIL_BACKEND=vllm
 TOKEN_TRAIL_VLLM_BASE_URL=http://127.0.0.1:8000/v1
 TOKEN_TRAIL_VLLM_MODEL=Qwen/Qwen3-4B
@@ -147,6 +154,7 @@ Token Trail uses the Open Day fixed local service map.
 |---|---:|---|
 | Token Trail scripted/kiosk app | 3100 | Current single-process MVP |
 | Token Trail backend/API | 8100 | Reserved for future split backend |
+| HF trace server / model adapter | 8600 | Optional live trace adapter |
 | Ollama | 11434 | External Ollama runtime |
 | vLLM OpenAI-compatible server | 8000 | External vLLM runtime, if deliberately enabled |
 
@@ -161,7 +169,7 @@ It is acceptable to install both on the Framework Desktop, but avoid depending o
 Recommended approach:
 
 1. Use scripted mode as the guaranteed fallback.
-2. Use Ollama as the first live SLM backend for Token Trail.
+2. Use either Ollama or HF trace as the supervised live backend for Token Trail, depending on rehearsal reliability.
 3. Keep vLLM as an experimental or shared-serving path until it is proven with the full booth load.
 4. During final rehearsal, run all planned demos together and watch memory, thermals, ports, and restart complexity.
 
