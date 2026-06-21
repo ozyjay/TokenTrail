@@ -56,5 +56,4 @@ Use this table for local results:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `Qwen/Qwen2.5-0.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
 | `Qwen/Qwen2.5-1.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Configured default until measured otherwise |
-| `HuggingFaceTB/SmolLM2-1.7B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
 | `Qwen/Qwen2.5-3B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
