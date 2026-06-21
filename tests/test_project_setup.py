@@ -18,6 +18,8 @@ def test_required_project_files_exist() -> None:
         "scripts/test.ps1",
         "scripts/run.ps1",
         "scripts/serve_hf_trace.ps1",
+        "scripts/benchmark_hf_trace.ps1",
+        "scripts/benchmark_hf_trace.py",
         "web/index.html",
     ]
 
@@ -83,6 +85,15 @@ def test_hf_trace_server_powershell_script_uses_core_install_and_forwards_args()
     assert "poetry install" not in script
     assert "$env:PYTHONPATH = \"src\"" in script
     assert "poetry run python scripts/serve_hf_trace.py @args" in script
+
+
+def test_hf_trace_benchmark_powershell_script_uses_core_install_and_forwards_args() -> None:
+    script = (PROJECT_ROOT / "scripts/benchmark_hf_trace.ps1").read_text(encoding="utf-8")
+
+    assert "poetry install --with hf-trace" not in script
+    assert "poetry install" not in script
+    assert "$env:PYTHONPATH = \"src\"" in script
+    assert "poetry run python scripts/benchmark_hf_trace.py @args" in script
 
 
 def test_model_config_file_lists_runtime_models() -> None:

@@ -51,6 +51,20 @@ Choose the final booth default from measured local performance, not assumptions.
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model <model> --candidate-source forward-logits
 ```
 
+For a repeatable benchmark across locally available configured models, start the HF trace server with the forward-logits path in one terminal:
+
+```powershell
+pwsh -NoProfile -File ./scripts/serve_hf_trace.ps1 --candidate-source forward-logits
+```
+
+Then run the benchmark in another terminal:
+
+```powershell
+pwsh -NoProfile -File ./scripts/benchmark_hf_trace.ps1
+```
+
+The benchmark calls `GET /api/models`, only attempts configured models that the server reports as locally available, calls `POST /api/warmup` before timing traces, and writes JSON and CSV files under `artifacts/hf_trace_benchmarks/`. It uses fixed Open Day-safe prompts and does not download models.
+
 Use this table for local results:
 
 | Model | Machine | Candidate source | Cold load time | Warm trace time | Repeat trace time | Peak RAM/VRAM if known | Complete-sentence success | Candidate quality notes | Decision |
