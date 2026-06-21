@@ -20,6 +20,7 @@ from token_trail.traces import get_trace, list_traces
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
+HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass
@@ -254,7 +255,7 @@ def _config_with_runtime_hf_models(config: RuntimeConfig, adapter: HfTraceAdapte
     if not config.hf_trace_enabled:
         return config
     try:
-        discovery = adapter.models(timeout_seconds=2.0)
+        discovery = adapter.models(timeout_seconds=HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS)
     except AdapterError:
         return config
     models = tuple(entry["model"] for entry in discovery["models"])
@@ -269,7 +270,7 @@ def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[s
         return {}
 
     try:
-        discovery = adapter.models(timeout_seconds=2.0)
+        discovery = adapter.models(timeout_seconds=HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS)
         return {
             entry["model"]: HfTraceStatus(
                 available=bool(entry["available"]),

@@ -20,6 +20,7 @@ from token_trail.server import run_server
 
 
 HF_TRACE_HEALTH_TIMEOUT_SECONDS = 20.0
+HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS = 30.0
 def should_manage_hf_trace(config: RuntimeConfig) -> bool:
     return config.backend == "hf-trace" and config.hf_trace_enabled
 
@@ -99,7 +100,7 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
 
 def discover_and_warm_hf_trace_model(config: RuntimeConfig) -> RuntimeConfig:
     adapter = HfTraceAdapter(config.hf_trace_url)
-    discovery = adapter.models(timeout_seconds=2.0)
+    discovery = adapter.models(timeout_seconds=HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS)
     configured_models = tuple(entry["model"] for entry in discovery["models"])
     available_entries = [entry for entry in discovery["models"] if entry["available"]]
     print("Discovered configured HF trace models:")

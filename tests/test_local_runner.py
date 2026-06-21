@@ -183,6 +183,7 @@ def test_run_local_stack_warms_default_model_before_starting_app(monkeypatch) ->
 
     run_local_stack(make_config())
 
+    assert ("models", 30.0) in calls
     assert ("warmup", "Qwen/Qwen2.5-0.5B-Instruct", 180) in calls
     assert calls[-1] == ("run_server", "127.0.0.1", 3100, "Qwen/Qwen2.5-0.5B-Instruct")
 
