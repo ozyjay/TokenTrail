@@ -65,10 +65,14 @@ pwsh -NoProfile -File ./scripts/benchmark_hf_trace.ps1
 
 The benchmark calls `GET /api/models`, only attempts configured models that the server reports as locally available, calls `POST /api/warmup` before timing traces, and writes JSON and CSV files under `artifacts/hf_trace_benchmarks/`. It uses fixed Open Day-safe prompts and does not download models.
 
+Press Ctrl+C in the benchmark terminal to stop before the remaining traces. The benchmark saves partial JSON and CSV results before exiting; an already-running server-side trace may still finish inside the HF trace server process.
+
 Use this table for local results:
 
 | Model | Machine | Candidate source | Cold load time | Warm trace time | Repeat trace time | Peak RAM/VRAM if known | Complete-sentence success | Candidate quality notes | Decision |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `Qwen/Qwen2.5-0.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
-| `Qwen/Qwen2.5-1.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Configured default until measured otherwise |
-| `Qwen/Qwen2.5-3B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
+| `Qwen/Qwen2.5-0.5B-Instruct` | Local Open Day Mac, `20260621T145358Z` run | `forward-logits` | Not captured by this run | `1.47s` average trace, `1.14s`-`1.99s` range | Not measured separately | Not measured | `3/3` successful traces | Fastest overall, but more verbose and less disciplined; robot prompt ran to 56 steps | Fast fallback/candidate, not preferred default |
+| `Qwen/Qwen2.5-1.5B-Instruct` | Local Open Day Mac, `20260621T145358Z` run | `forward-logits` | Not captured by this run | `1.97s` average trace, `1.96s`-`1.97s` range | Not measured separately | Not measured | `3/3` successful traces | Best balance of speed, clean wording, and stable output shape | Preferred Open Day default |
+| `Qwen/Qwen2.5-3B-Instruct` | Local Open Day Mac, `20260621T145358Z` run | `forward-logits` | Not captured by this run | `2.29s` average trace, `1.02s`-`3.40s` range | Not measured separately | Not measured | `3/3` successful traces | Good short tokenisation answer, but slower and sometimes chatty with assistant-style formatting | Candidate only if quality improves enough to justify latency |
+
+`20260621T145358Z` benchmark summary: all 9 configured-model traces succeeded, with no fallback or error text. `candidate_count` matched `5 x step_count` for every row, which confirms the forward-logits candidate path was returning the expected five alternatives per generated step. Keep `Qwen/Qwen2.5-1.5B-Instruct` as the booth default unless later local measurements show a better speed/quality trade-off.

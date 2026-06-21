@@ -46,6 +46,14 @@ class BenchmarkError(Exception):
     """Raised when the benchmark cannot run."""
 
 
+class BenchmarkInterrupted(Exception):
+    """Raised when the benchmark is interrupted after collecting partial results."""
+
+    def __init__(self, results: Sequence[dict[str, Any]]) -> None:
+        super().__init__("interrupted by user")
+        self.results = list(results)
+
+
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Benchmark configured HF trace models through the local API.")
     parser.add_argument("--trace-url", default=DEFAULT_TRACE_URL, help="HF trace endpoint URL")
@@ -65,6 +73,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
+    interrupted = False
     try:
         results = run_benchmark(
             trace_url=args.trace_url,
@@ -82,6 +91,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             prompts=BENCHMARK_PROMPTS,
             results=results,
         )
+    except BenchmarkInterrupted as error:
+        interrupted = True
+        results = error.results
+        json_path, csv_path = write_results(
+            output_dir=Path(args.output_dir),
+            trace_url=args.trace_url,
+            candidate_source=args.candidate_source,
+            prompts=BENCHMARK_PROMPTS,
+            results=results,
+        )
     except BenchmarkError as error:
         print(f"HF trace benchmark failed: {error}", file=sys.stderr)
         return 2
@@ -90,6 +109,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Wrote HF trace benchmark JSON: {json_path}")
     print(f"Wrote HF trace benchmark CSV: {csv_path}")
     print(f"Successful traces: {successes}/{len(results)}")
+    if interrupted:
+        print("Benchmark interrupted; partial results were saved.", file=sys.stderr)
+        return 130
     return 0 if successes else 1
 
 
@@ -121,16 +143,22 @@ def run_benchmark(
             results.append(_failure_row(model=model, prompt="", candidate_source=candidate_source, error=_entry_reason(entry)))
             continue
 
-        warmup_seconds, warmup_result = _time_request(
-            clock,
-            lambda: request_json(
-                _warmup_url_for_trace_url(trace_url),
-                method="POST",
-                payload={"model": model},
-                timeout_seconds=timeout_seconds,
-                opener=opener,
-            ),
-        )
+        try:
+            warmup_seconds, warmup_result = _time_request(
+                clock,
+                lambda: request_json(
+                    _warmup_url_for_trace_url(trace_url),
+                    method="POST",
+                    payload={"model": model},
+                    timeout_seconds=timeout_seconds,
+                    opener=opener,
+                ),
+            )
+        except KeyboardInterrupt as error:
+            results.append(
+                _failure_row(model=model, prompt="", candidate_source=candidate_source, error="interrupted by user")
+            )
+            raise BenchmarkInterrupted(results) from error
         if isinstance(warmup_result, str):
             for prompt in prompts:
                 results.append(
@@ -145,17 +173,29 @@ def run_benchmark(
             continue
 
         for prompt in prompts:
-            trace_seconds, trace_result = _time_trace(
-                trace_url=trace_url,
-                model=model,
-                prompt=prompt,
-                timeout_seconds=timeout_seconds,
-                max_new_tokens=max_new_tokens,
-                top_k=top_k,
-                temperature=temperature,
-                opener=opener,
-                clock=clock,
-            )
+            try:
+                trace_seconds, trace_result = _time_trace(
+                    trace_url=trace_url,
+                    model=model,
+                    prompt=prompt,
+                    timeout_seconds=timeout_seconds,
+                    max_new_tokens=max_new_tokens,
+                    top_k=top_k,
+                    temperature=temperature,
+                    opener=opener,
+                    clock=clock,
+                )
+            except KeyboardInterrupt as error:
+                results.append(
+                    _failure_row(
+                        model=model,
+                        prompt=prompt,
+                        candidate_source=candidate_source,
+                        warmup_seconds=warmup_seconds,
+                        error="interrupted by user",
+                    )
+                )
+                raise BenchmarkInterrupted(results) from error
             if isinstance(trace_result, str):
                 results.append(
                     _failure_row(

@@ -209,6 +209,50 @@ def test_benchmark_records_trace_failure() -> None:
     assert "HTTP 503" in results[0]["error"]
 
 
+def test_benchmark_interrupt_preserves_completed_results() -> None:
+    benchmark = load_benchmark_module()
+
+    def opener(request, timeout):
+        if request.full_url.endswith("/api/models"):
+            return FakeResponse(
+                body={"models": [{"model": "Qwen/Qwen2.5-0.5B-Instruct", "configured": True, "available": True}]}
+            )
+        if request.full_url.endswith("/api/warmup"):
+            return FakeResponse(body={"status": "ready"})
+        raise KeyboardInterrupt
+
+    try:
+        benchmark.run_benchmark(
+            trace_url="http://127.0.0.1:8600/api/trace",
+            prompts=["Prompt"],
+            timeout_seconds=5,
+            max_new_tokens=24,
+            top_k=5,
+            temperature=0.3,
+            candidate_source="forward-logits",
+            opener=opener,
+            clock=FakeClock(),
+        )
+    except benchmark.BenchmarkInterrupted as error:
+        assert error.results == [
+            {
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "prompt": "Prompt",
+                "candidate_source": "forward-logits",
+                "success": False,
+                "warmup_seconds": 0.25,
+                "trace_seconds": 0.0,
+                "error": "interrupted by user",
+                "fallback": "",
+                "step_count": 0,
+                "generated_text": "",
+                "candidate_count": 0,
+            }
+        ]
+    else:
+        raise AssertionError("expected BenchmarkInterrupted")
+
+
 def test_write_results_creates_json_and_csv(tmp_path: Path) -> None:
     benchmark = load_benchmark_module()
     rows = [
