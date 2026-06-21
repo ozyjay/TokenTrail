@@ -1,4 +1,4 @@
-"""Client for the optional local Hugging Face trace server."""
+"""Client for the local Hugging Face trace server."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ UrlOpen = Callable[..., Any]
 
 @dataclass(frozen=True)
 class HfTraceStatus:
-    """Reachability summary for the optional HF trace server."""
+    """Reachability summary for the HF trace server."""
 
     available: bool
     model_loaded: bool = False
@@ -103,6 +103,36 @@ class HfTraceAdapter:
         validate_trace_payload(trace)
         return trace
 
+    def warmup(self, model: str, *, timeout_seconds: float) -> dict:
+        """Ask the HF trace server to load the selected model without generating a trace."""
+
+        payload = {"model": model}
+        request = Request(
+            _warmup_url_for_trace_url(self.trace_url),
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with self._opener(request, timeout=float(timeout_seconds)) as response:
+                raw_body = response.read()
+        except TimeoutError as error:
+            raise AdapterError("HF trace warm-up timed out") from error
+        except HTTPError as error:
+            raise AdapterError(f"HF trace warm-up failed: {_http_error_message(error)}") from error
+        except (URLError, OSError) as error:
+            raise AdapterError(f"HF trace warm-up failed: {error}") from error
+
+        try:
+            result = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterError("HF trace warm-up returned invalid JSON") from error
+
+        if not isinstance(result, dict) or result.get("status") != "ready" or result.get("model") != model:
+            raise AdapterError("HF trace warm-up returned an unexpected response")
+        return result
+
 
 def validate_trace_payload(trace: Any) -> None:
     if not isinstance(trace, dict):
@@ -169,3 +199,8 @@ def _health_url_for_trace_url(trace_url: str, *, model: str | None = None) -> st
     parsed = urlparse(trace_url)
     query = f"model={quote(model, safe='')}" if model else ""
     return urlunparse((parsed.scheme or "http", parsed.netloc, "/health", "", query, ""))
+
+
+def _warmup_url_for_trace_url(trace_url: str) -> str:
+    parsed = urlparse(trace_url)
+    return urlunparse((parsed.scheme or "http", parsed.netloc, "/api/warmup", "", "", ""))

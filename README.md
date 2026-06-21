@@ -11,7 +11,7 @@ Current app status: **primary Hugging Face Transformers live token traces with s
 | `hf-trace:<model>` | Default live token-trace backend from the local HF trace server | Primary when enabled and healthy |
 | `scripted:prepared-traces` | Guaranteed scripted fallback and secondary prepared mode | Always available |
 
-The browser UI exposes only these runtime families. Normal operation is to run HF trace when healthy, then fall back to scripted prepared traces if HF trace fails, is too slow, is not ready, or cannot complete a sentence. The candidates shown are returned token alternatives from the local model, not private reasoning.
+The browser UI exposes only these runtime families. Normal operation is to start the HF trace server, preload the selected model, run HF trace mode when healthy, then fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete. The bars show top returned token alternatives from the local model, not private reasoning.
 
 ## Setup
 
@@ -39,7 +39,7 @@ Run the local probe with the documented candidate source:
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
 
-`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits only for the trace server health check; the selected model loads on the first HF generation request in the web app.
+`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits for `/health`, calls `POST /api/warmup` for the configured model, then starts the Token Trail app. If warm-up fails, setup fails visibly so staff can switch to scripted prepared traces.
 
 ## UX Notes
 
@@ -48,6 +48,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 - Non-scripted mode means HF trace mode, and it accepts staff-entered prompts.
 - Scripted mode keeps the prompt locked to curated traces; reset and runtime switching restore the curated prompt view.
 - Generated HF traces are trimmed to the first complete sentence after at least eight generated steps.
+- Staff line: This live mode asks a small local model to continue the prompt. The bars show top returned token alternatives, not private reasoning.
 
 ## Shutdown Notes
 

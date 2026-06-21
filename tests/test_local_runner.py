@@ -3,6 +3,7 @@ from token_trail.local_runner import (
     ensure_hf_trace_server,
     hf_trace_health_url,
     hf_trace_server_address,
+    preload_hf_trace_model,
     should_manage_hf_trace,
 )
 
@@ -46,16 +47,20 @@ def test_hf_trace_health_url_uses_trace_server_origin() -> None:
     )
 
 
-def test_ensure_hf_trace_server_does_not_wait_for_model_warmup_when_already_healthy(monkeypatch) -> None:
+def test_ensure_hf_trace_server_preloads_model_when_already_healthy(monkeypatch) -> None:
+    warmups = []
     monkeypatch.setattr("token_trail.local_runner.is_hf_trace_server_healthy", lambda config: True)
+    monkeypatch.setattr("token_trail.local_runner.preload_hf_trace_model", lambda config: warmups.append(config))
 
     process = ensure_hf_trace_server(make_config())
 
     assert process is None
+    assert warmups == [make_config()]
 
 
-def test_ensure_hf_trace_server_does_not_wait_for_model_warmup_after_start(monkeypatch) -> None:
+def test_ensure_hf_trace_server_preloads_model_after_start(monkeypatch) -> None:
     health_calls = []
+    warmups = []
 
     class FakeProcess:
         returncode = None
@@ -68,9 +73,32 @@ def test_ensure_hf_trace_server_does_not_wait_for_model_warmup_after_start(monke
         return len(health_calls) > 1
 
     monkeypatch.setattr("token_trail.local_runner.is_hf_trace_server_healthy", fake_is_healthy)
+    monkeypatch.setattr("token_trail.local_runner.preload_hf_trace_model", lambda config: warmups.append(config))
     monkeypatch.setattr("token_trail.local_runner.subprocess.Popen", lambda *args, **kwargs: FakeProcess())
     monkeypatch.setattr("token_trail.local_runner.time.sleep", lambda seconds: None)
 
     process = ensure_hf_trace_server(make_config())
 
     assert isinstance(process, FakeProcess)
+    assert warmups == [make_config()]
+
+
+def test_preload_hf_trace_model_calls_adapter_warmup(monkeypatch) -> None:
+    calls = []
+
+    class FakeAdapter:
+        def __init__(self, trace_url):
+            calls.append(("init", trace_url))
+
+        def warmup(self, model, *, timeout_seconds):
+            calls.append(("warmup", model, timeout_seconds))
+            return {"status": "ready", "model": model}
+
+    monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
+
+    preload_hf_trace_model(make_config())
+
+    assert calls == [
+        ("init", "http://127.0.0.1:8600/api/trace"),
+        ("warmup", "Qwen/Qwen2.5-0.5B-Instruct", 20),
+    ]

@@ -1,6 +1,6 @@
 # Development Environments
 
-Token Trail uses Poetry and Python 3.12. The supported local runtime families are scripted prepared traces and the Hugging Face Transformers trace server.
+Token Trail uses Poetry and Python 3.12. The supported local runtime families are the primary Hugging Face Transformers trace server and scripted prepared traces as the mandatory fallback / secondary prepared mode.
 
 HF trace dependencies are installed by the normal Poetry setup.
 
@@ -40,4 +40,4 @@ TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=96
 
 Token Trail binds to `127.0.0.1:3100` by default. The HF trace server binds to `127.0.0.1:8600` by default when managed by `scripts/run.ps1`.
 
-`scripts/run.ps1` waits only for the HF trace server health endpoint. It does not pre-load the default model; model loading happens on the first HF generation request from the web app.
+`scripts/run.ps1` waits for the HF trace server health endpoint, preloads the selected model through `POST /api/warmup`, and then starts the Token Trail web app. If warm-up fails, setup fails visibly so staff can use scripted prepared traces instead.

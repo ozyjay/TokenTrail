@@ -9,7 +9,7 @@ The supported live small-language-model path is the primary local Hugging Face T
 - Generated traces replay at the selected browser speed.
 - The trace server trims to the first complete sentence after at least eight generated steps.
 - Incomplete, slow, unavailable, or not-ready HF traces fail closed so Token Trail can show the scripted prepared fallback payload.
-- Public wording should describe candidates as local model token alternatives, not private reasoning.
+- Public wording should say the bars show top returned token alternatives from the local model, not private reasoning.
 
 ## Commands
 

@@ -1,4 +1,4 @@
-"""Local development runner for Token Trail and optional adapter services."""
+"""Local development runner for Token Trail and adapter services."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from token_trail.adapters.hf_trace import HfTraceAdapter
 from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config
 from token_trail.ports import check_port_or_exit
 from token_trail.server import run_server
@@ -68,6 +69,7 @@ def run_local_stack(config: RuntimeConfig) -> None:
 def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | None:
     if is_hf_trace_server_healthy(config):
         print("HF trace server is already running.")
+        preload_hf_trace_model(config)
         return None
 
     host, port = hf_trace_server_address(config)
@@ -86,11 +88,21 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
 
     try:
         wait_for_hf_trace_health(config, process=process)
+        preload_hf_trace_model(config)
     except Exception:
         stop_process(process)
         raise
 
     return process
+
+
+def preload_hf_trace_model(config: RuntimeConfig) -> None:
+    print(f"Preloading HF trace model {config.hf_trace_model}...")
+    HfTraceAdapter(config.hf_trace_url).warmup(
+        config.hf_trace_model,
+        timeout_seconds=config.hf_trace_timeout_seconds,
+    )
+    print(f"HF trace model ready: {config.hf_trace_model}")
 
 
 def is_hf_trace_server_healthy(config: RuntimeConfig, *, timeout_seconds: float = 1.0) -> bool:

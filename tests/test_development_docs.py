@@ -48,6 +48,50 @@ def test_main_docs_explain_hf_trace_is_core_dependency() -> None:
         assert "--candidate-source forward-logits" in document
 
 
+def test_docs_describe_hf_trace_as_primary_with_preload() -> None:
+    for relative_path in (
+        "README.md",
+        "docs/DEVELOPMENT_ENVIRONMENTS.md",
+        "docs/MODEL_BACKENDS.md",
+        "docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md",
+        "docs/LOCAL_TEST_NOTES.md",
+    ):
+        document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+
+        assert "optional HF trace" not in document
+        assert "loads on the first HF generation request" not in document
+        assert "first HF generation request pays" not in document
+        assert "preload" in document.lower() or "preloads" in document.lower()
+
+
+def test_local_test_notes_include_hf_model_benchmark_table() -> None:
+    notes = (PROJECT_ROOT / "docs/LOCAL_TEST_NOTES.md").read_text(encoding="utf-8")
+
+    for heading in (
+        "Model",
+        "Machine",
+        "Candidate source",
+        "Cold load time",
+        "Warm trace time",
+        "Repeat trace time",
+        "Peak RAM/VRAM if known",
+        "Complete-sentence success",
+        "Candidate quality notes",
+        "Decision",
+    ):
+        assert heading in notes
+
+    for model in (
+        "Qwen/Qwen2.5-0.5B-Instruct",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "HuggingFaceTB/SmolLM2-1.7B-Instruct",
+        "Qwen/Qwen2.5-3B-Instruct",
+    ):
+        assert model in notes
+
+    assert "Choose the final booth default from measured local performance, not assumptions" in notes
+
+
 def test_main_docs_do_not_reference_shell_scripts() -> None:
     for relative_path in (
         "README.md",

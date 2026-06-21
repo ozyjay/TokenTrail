@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import sys
+import threading
 import warnings
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,6 +28,7 @@ from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8600
 DEFAULT_CANDIDATE_SOURCE = "forward-logits"
+MAX_PROMPT_CHARS = 500
 PYTHON_STARTUP_ROOT = PROJECT_ROOT / "scripts" / "hf_trace_python_startup"
 
 
@@ -62,6 +64,7 @@ class TransformersTraceRunner:
         self._model_class = None
         self._tokenizer_class = None
         self._models: dict[str, tuple[Any, Any]] = {}
+        self._generation_lock = threading.Lock()
 
     def generate_trace(
         self,
@@ -72,27 +75,32 @@ class TransformersTraceRunner:
         top_k: int,
         temperature: float,
     ) -> dict[str, Any]:
-        tokenizer, loaded_model = self._model_and_tokenizer(model)
-        generated = self._probe.generate_with_scores(
-            tokenizer=tokenizer,
-            model=loaded_model,
-            torch_module=self._torch,
-            prompt=prompt,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-        )
-        trace = self._probe.build_trace_from_generation(
-            model_name=model,
-            prompt=prompt,
-            tokenizer=tokenizer,
-            model=loaded_model,
-            torch_module=self._torch,
-            generated=generated,
-            top_k=top_k,
-            candidate_source=self.candidate_source,
-        )
-        validate_trace_payload(trace)
-        return trace
+        with self._generation_lock:
+            tokenizer, loaded_model = self._model_and_tokenizer(model)
+            generated = self._probe.generate_with_scores(
+                tokenizer=tokenizer,
+                model=loaded_model,
+                torch_module=self._torch,
+                prompt=prompt,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+            )
+            trace = self._probe.build_trace_from_generation(
+                model_name=model,
+                prompt=prompt,
+                tokenizer=tokenizer,
+                model=loaded_model,
+                torch_module=self._torch,
+                generated=generated,
+                top_k=top_k,
+                candidate_source=self.candidate_source,
+            )
+            validate_trace_payload(trace)
+            return trace
+
+    def preload_model(self, model: str) -> None:
+        with self._generation_lock:
+            self._model_and_tokenizer(model)
 
     def _model_and_tokenizer(self, model_name: str) -> tuple[Any, Any]:
         if self._torch is None or self._model_class is None or self._tokenizer_class is None:
@@ -140,6 +148,10 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "Not found"}, status=404)
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        if self.path == "/api/warmup":
+            self._handle_warmup()
+            return
+
         if self.path != "/api/trace":
             self._send_json({"error": "Not found"}, status=404)
             return
@@ -157,14 +169,26 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
 
         self._send_json(trace)
 
-    def _read_request(self) -> dict[str, Any]:
-        length = int(self.headers.get("Content-Length", "0"))
+    def _handle_warmup(self) -> None:
         try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise HfTraceServerError("Request body must be valid JSON") from error
+            payload = self._read_json_body()
+            model = _required_string(payload, "model")
+            self.server.state.trace_runner.preload_model(model)
+        except HfTraceServerError as error:
+            self._send_json({"error": str(error)}, status=400)
+            return
+        except Exception as error:  # pragma: no cover - defensive HTTP boundary
+            self._send_json({"error": f"HF trace warm-up failed: {error}"}, status=500)
+            return
+
+        self._send_json({"status": "ready", "model": model})
+
+    def _read_request(self) -> dict[str, Any]:
+        payload = self._read_json_body()
 
         prompt = _required_string(payload, "prompt")
+        if len(prompt) > MAX_PROMPT_CHARS:
+            raise HfTraceServerError(f"prompt must be {MAX_PROMPT_CHARS} characters or fewer")
         model = _required_string(payload, "model")
         return {
             "prompt": prompt,
@@ -173,6 +197,13 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
             "top_k": _int_setting(payload, "top_k", 5, minimum=1),
             "temperature": _float_setting(payload, "temperature", 0.3, minimum=0),
         }
+
+    def _read_json_body(self) -> Any:
+        length = int(self.headers.get("Content-Length", "0"))
+        try:
+            return json.loads(self.rfile.read(length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise HfTraceServerError("Request body must be valid JSON") from error
 
     def _send_json(self, payload: dict[str, Any], status: int = 200) -> None:
         body = json.dumps(payload).encode("utf-8")

@@ -33,4 +33,28 @@ Stopping the combined local stack prints the Token Trail and HF trace server sto
 
 ## 2026-06-20 — HF Trace Startup
 
-`scripts/run.ps1` starts the HF trace server and waits only for `/health`. It no longer waits for the default model to warm before starting the Token Trail web app; the first HF generation request pays the model-load cost visibly in the browser flow.
+`scripts/run.ps1` starts the HF trace server, waits for `/health`, calls `POST /api/warmup` for the configured model, and then starts the Token Trail web app. Warm-up failure should be visible to the operator before visitors use the booth.
+
+Normal operation is:
+
+1. Start the HF trace server.
+2. Preload/warm the selected model.
+3. Run HF trace mode when healthy.
+4. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
+
+## 2026-06-21 — Local HF Model Benchmarks
+
+Choose the final booth default from measured local performance, not assumptions. Run each candidate with the forward-logits path:
+
+```powershell
+pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --model <model> --candidate-source forward-logits
+```
+
+Use this table for local results:
+
+| Model | Machine | Candidate source | Cold load time | Warm trace time | Repeat trace time | Peak RAM/VRAM if known | Complete-sentence success | Candidate quality notes | Decision |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `Qwen/Qwen2.5-0.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
+| `Qwen/Qwen2.5-1.5B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Configured default until measured otherwise |
+| `HuggingFaceTB/SmolLM2-1.7B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |
+| `Qwen/Qwen2.5-3B-Instruct` | To measure locally | `forward-logits` | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Not yet measured | Candidate |

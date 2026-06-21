@@ -3,7 +3,7 @@ import json
 from urllib.error import HTTPError, URLError
 
 from token_trail.adapters.base import AdapterError
-from token_trail.adapters.hf_trace import HfTraceAdapter
+from token_trail.adapters.hf_trace import HfTraceAdapter, _warmup_url_for_trace_url
 
 
 def http_error(status: int, payload: dict) -> HTTPError:
@@ -59,6 +59,54 @@ def test_status_reports_unavailable_when_health_endpoint_fails() -> None:
 
     assert not status.available
     assert "connection refused" in status.error
+
+
+def test_warmup_posts_model_to_warmup_endpoint() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(
+            (
+                request.full_url,
+                request.get_method(),
+                json.loads(request.data.decode("utf-8")),
+                timeout,
+            )
+        )
+        return FakeResponse(status=200, body={"status": "ready", "model": "Qwen/Qwen2.5-0.5B-Instruct"})
+
+    payload = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).warmup(
+        "Qwen/Qwen2.5-0.5B-Instruct",
+        timeout_seconds=12,
+    )
+
+    assert payload == {"status": "ready", "model": "Qwen/Qwen2.5-0.5B-Instruct"}
+    assert calls == [
+        (
+            "http://127.0.0.1:8600/api/warmup",
+            "POST",
+            {"model": "Qwen/Qwen2.5-0.5B-Instruct"},
+            12.0,
+        )
+    ]
+
+
+def test_warmup_reports_http_error() -> None:
+    def opener(request, timeout):
+        raise http_error(400, {"error": "Request body is missing required string: model"})
+
+    adapter = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener)
+
+    try:
+        adapter.warmup("", timeout_seconds=2)
+    except AdapterError as error:
+        assert "model" in str(error)
+    else:
+        raise AssertionError("expected AdapterError")
+
+
+def test_warmup_url_uses_trace_server_origin() -> None:
+    assert _warmup_url_for_trace_url("http://127.0.0.1:8600/api/trace") == "http://127.0.0.1:8600/api/warmup"
 
 
 def test_generate_trace_still_reports_incomplete_generation_as_error() -> None:

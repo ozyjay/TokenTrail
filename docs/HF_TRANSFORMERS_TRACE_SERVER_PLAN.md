@@ -13,7 +13,7 @@ The trace server returns Token Trail JSON with:
 - generated `steps`;
 - top returned `candidates` and `explanation` for each step.
 
-Token Trail validates the payload before replay. Normal operation is to replay HF traces when the server is healthy and the selected model returns clean output. If validation fails, generation is too slow, the server is not ready, or the generation does not reach a complete sentence after at least eight generated steps, the main server returns the scripted prepared fallback. The candidate list represents token alternatives returned by the local model, not private reasoning.
+Token Trail validates the payload before replay. Normal operation is to start the HF trace server, preload the selected model, replay HF traces when the server is healthy and the selected model returns clean output, then use scripted prepared traces as the mandatory fallback / secondary prepared mode if validation fails, generation is slow, the server is unavailable, the output is unstable, unreadable, confusing, or the generation does not reach a complete sentence after at least eight generated steps. The bars show top returned token alternatives from the local model, not private reasoning.
 
 ## Configuration
 
@@ -46,4 +46,4 @@ Keep that suppression narrow to the known shutdown warning. Request failures, tr
 
 ## Startup Behaviour
 
-The local runner waits only for the HF trace server `/health` endpoint. It should not submit a warm-up generation for the configured default model during `scripts/run.ps1`; model loading happens on the first real HF generation request.
+The local runner waits for the HF trace server `/health` endpoint, then calls `POST /api/warmup` for the configured default model before starting the Token Trail web app. Warm-up loads the tokenizer and model into the server cache without generating a visible trace. If warm-up fails, startup fails visibly so the operator can use scripted prepared traces.
