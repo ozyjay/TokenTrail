@@ -7,10 +7,11 @@
 3. Open `http://127.0.0.1:3100`.
 4. Confirm the runtime selector shows available HF trace models and scripted prepared traces.
 5. Confirm the trail speed selector offers Slow, Normal, and Fast.
-6. Confirm the selected HF trace model was preloaded during startup.
-7. In HF trace mode, enter a short prompt and confirm the selected model produces a clean trace that replays to a complete sentence.
-8. Switch to scripted mode and confirm the prompt editor disappears.
-9. Press Reset and confirm the selected curated prompt and prepared trace are restored.
+6. Confirm the default selected HF trace model shows loading, then ready.
+7. Switch HF trace models and confirm the newly selected model shows loading, then ready, before Generate is enabled.
+8. In HF trace mode, enter a short prompt and confirm the selected model produces a clean trace that replays to a complete sentence.
+9. Switch to scripted mode and confirm the prompt editor disappears.
+10. Press Reset and confirm the selected curated prompt and prepared trace are restored.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/test.ps1
@@ -19,13 +20,13 @@ pwsh -NoProfile -File ./scripts/run.ps1
 
 ## Fallback Rule
 
-Normal operation is HF trace first when the server is healthy and the selected model is preloaded. If HF trace mode is slow, unavailable, not ready, unstable, unreadable, confusing, or returns an incomplete generation, use scripted prepared traces. The scripted fallback is mandatory for public reliability.
+Normal operation is HF trace first when the server is healthy and the selected model has reached ready. If HF trace mode is slow, unavailable, not ready, unstable, unreadable, confusing, or returns an incomplete generation, use scripted prepared traces. The scripted fallback is mandatory for public reliability.
 
 Staff line: This live mode asks a small local model to continue the prompt. The bars show top returned token alternatives, not private reasoning.
 
 ## Go/No-Go
 
-- GO: HF trace server healthy, selected model preloaded, one clean trace completes, and Reset works.
+- GO: HF trace server healthy, selected model reaches ready, one clean trace completes, and Reset works.
 - FALLBACK: scripted prepared traces.
 - NO-GO for HF: model load or generation is slow, unstable, unreadable, confusing, or incomplete.
 

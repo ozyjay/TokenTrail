@@ -11,7 +11,7 @@ Current app status: **primary Hugging Face Transformers live token traces with s
 | `hf-trace:<model>` | Default live token-trace backend from the local HF trace server | Primary when enabled and healthy |
 | `scripted:prepared-traces` | Guaranteed scripted fallback and secondary prepared mode | Always available |
 
-The browser UI exposes only these runtime families. Normal operation is to start the HF trace server, preload the selected model, run HF trace mode when healthy, then fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete. The bars show top returned token alternatives from the local model, not private reasoning.
+The browser UI exposes only these runtime families. Normal operation is to start the HF trace server, discover local models, show the default HF model as loading/ready in the runtime selector, warm the selected model when it is selected, then run HF trace mode once that model is ready. Scripted prepared traces remain the fallback if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete. The bars show top returned token alternatives from the local model, not private reasoning.
 
 ## Setup
 
@@ -28,7 +28,9 @@ HF trace dependencies are installed by the normal Poetry setup.
 HF trace runtime options are discovered from locally cached/installed Hugging Face models at startup. Use `TOKEN_TRAIL_HF_TRACE_MODEL` only as a preferred initial model when that model is already installed locally:
 
 ```text
+TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
+TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
 ```
 
@@ -40,7 +42,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 
 Use `--allow-download` only for an intentional setup/probe download before the demo.
 
-`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits for `/health`, calls `POST /api/warmup` for the configured model, then starts the Token Trail app. If warm-up fails, setup fails visibly so staff can switch to scripted prepared traces.
+`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits for `/health`, discovers local models, then starts the Token Trail app without waiting for a model to load. The app calls `POST /api/warmup` for the selected runtime model, shows loading/ready status, and disables live generation until the selected model is ready.
 
 ## UX Notes
 

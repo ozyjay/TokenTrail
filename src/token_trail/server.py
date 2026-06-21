@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -30,6 +31,10 @@ class ServerState:
     runtime_state: RuntimeState
     hf_trace_status: HfTraceStatus
     hf_trace_adapter: HfTraceAdapter
+    hf_warmup_statuses: dict[str, str]
+    hf_warmup_errors: dict[str, str]
+    hf_warmup_threads: dict[str, threading.Thread]
+    hf_warmup_lock: threading.Lock
 
 
 class TokenTrailServer(ThreadingHTTPServer):
@@ -58,6 +63,10 @@ def build_server_state(
         runtime_state=runtime_state,
         hf_trace_status=hf_trace_status,
         hf_trace_adapter=trace_adapter,
+        hf_warmup_statuses={},
+        hf_warmup_errors={},
+        hf_warmup_threads={},
+        hf_warmup_lock=threading.Lock(),
     )
 
 
@@ -80,6 +89,8 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/runtime":
             state = self._state
+            _refresh_runtime_options(state)
+            _ensure_selected_runtime_warmup(state)
             _refresh_runtime_options(state)
             self._send_json(state.runtime_state.to_dict(state.runtime_options))
             return
@@ -120,6 +131,8 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
             state.runtime_state.selected_id = select_runtime(str(payload["runtime_id"]), state.runtime_options)
+            _ensure_selected_runtime_warmup(state)
+            _refresh_runtime_options(state)
         except (KeyError, ValueError, json.JSONDecodeError) as error:
             self._send_json({"error": str(error)}, status=400)
             return
@@ -144,7 +157,13 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             return
 
         live_prompt = _live_prompt_from_payload(payload, trace.prompt)
+        _refresh_runtime_options(state)
         runtime = next(option for option in state.runtime_options if option.id == runtime_id)
+        if runtime.backend == "hf-trace" and runtime.status == "loading":
+            _ensure_model_warmup(state, runtime.model)
+            self._send_json({"error": f"HF trace model {runtime.model} is still loading"}, status=409)
+            return
+
         if runtime.backend == "scripted":
             self._send_json(
                 {
@@ -257,16 +276,86 @@ def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[s
 
 
 def _runtime_status_payload(statuses: dict[str, HfTraceStatus]) -> dict[str, dict[str, bool]]:
-    return {
+    return {model: {"available": status.available, "model_loaded": status.model_loaded} for model, status in statuses.items()}
+
+
+def _runtime_status_payload_for_state(state: ServerState, statuses: dict[str, HfTraceStatus]) -> dict[str, dict]:
+    payload: dict[str, dict] = {
         model: {"available": status.available, "model_loaded": status.model_loaded}
         for model, status in statuses.items()
     }
+    with state.hf_warmup_lock:
+        warmup_statuses = dict(state.hf_warmup_statuses)
+        warmup_errors = dict(state.hf_warmup_errors)
+
+    for model, warmup_status in warmup_statuses.items():
+        model_payload = payload.setdefault(model, {"available": True, "model_loaded": False})
+        if warmup_status == "loading":
+            model_payload["available"] = True
+            model_payload["loading"] = True
+            model_payload["model_loaded"] = False
+        elif warmup_status == "ready":
+            model_payload["available"] = True
+            model_payload["model_loaded"] = True
+        elif warmup_status == "error":
+            model_payload["available"] = False
+            model_payload["model_loaded"] = False
+            model_payload["error"] = warmup_errors.get(model, "HF trace model warm-up failed")
+    return payload
 
 
 def _refresh_runtime_options(state: ServerState) -> None:
     statuses = _hf_trace_statuses(state.config, state.hf_trace_adapter)
     state.hf_trace_status = statuses.get(state.config.hf_trace_model, HfTraceStatus(available=False))
-    state.runtime_options = build_runtime_options(state.config, hf_trace_statuses=_runtime_status_payload(statuses))
+    state.runtime_options = build_runtime_options(state.config, hf_trace_statuses=_runtime_status_payload_for_state(state, statuses))
+
+
+def _ensure_selected_runtime_warmup(state: ServerState) -> None:
+    runtime = next((option for option in state.runtime_options if option.id == state.runtime_state.selected_id), None)
+    if runtime is None or runtime.backend != "hf-trace":
+        return
+    _ensure_model_warmup(state, runtime.model)
+
+
+def _ensure_model_warmup(state: ServerState, model: str | None) -> None:
+    if not model:
+        return
+    status = state.hf_trace_adapter.status(model=model, timeout_seconds=min(state.config.hf_trace_timeout_seconds, 2.0))
+    if not status.available:
+        return
+    if status.model_loaded:
+        with state.hf_warmup_lock:
+            state.hf_warmup_statuses[model] = "ready"
+            state.hf_warmup_errors.pop(model, None)
+        return
+
+    with state.hf_warmup_lock:
+        existing = state.hf_warmup_threads.get(model)
+        if existing is not None and existing.is_alive():
+            state.hf_warmup_statuses[model] = "loading"
+            return
+        if state.hf_warmup_statuses.get(model) == "ready":
+            return
+
+        state.hf_warmup_statuses[model] = "loading"
+        state.hf_warmup_errors.pop(model, None)
+        thread = threading.Thread(target=_warm_model, args=(state, model), daemon=True)
+        state.hf_warmup_threads[model] = thread
+        thread.start()
+
+
+def _warm_model(state: ServerState, model: str) -> None:
+    try:
+        state.hf_trace_adapter.warmup(model, timeout_seconds=state.config.hf_trace_warmup_timeout_seconds)
+    except AdapterError as error:
+        with state.hf_warmup_lock:
+            state.hf_warmup_statuses[model] = "error"
+            state.hf_warmup_errors[model] = str(error)
+        return
+
+    with state.hf_warmup_lock:
+        state.hf_warmup_statuses[model] = "ready"
+        state.hf_warmup_errors.pop(model, None)
 
 
 def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:

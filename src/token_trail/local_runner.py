@@ -61,9 +61,7 @@ def run_local_stack(config: RuntimeConfig) -> None:
         if should_manage_hf_trace(config):
             hf_process = ensure_hf_trace_server(config)
             config = resolve_hf_trace_models(config)
-            if config.hf_trace_enabled:
-                preload_hf_trace_model(config)
-            else:
+            if not config.hf_trace_enabled:
                 print("No locally installed HF trace models found; scripted prepared traces remain available.")
 
         print("Starting Token Trail using .env/default configuration...")

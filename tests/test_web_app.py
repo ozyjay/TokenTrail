@@ -85,10 +85,30 @@ def test_runtime_selector_labels_hf_warm_status() -> None:
     assert 'runtimeStatusLabel(option)' in app_js
     assert 'case "ready":' in app_js
     assert 'return "ready";' in app_js
-    assert 'case "running":' in app_js
-    assert 'return "local files required";' in app_js
+    assert 'case "loading":' in app_js
+    assert 'return "loading";' in app_js
+    assert 'case "idle":' in app_js
+    assert 'return "select to load";' in app_js
     assert 'case "unavailable":' in app_js
     assert 'return "unavailable";' in app_js
+
+
+def test_web_app_prevents_runtime_selection_races() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "let runtimeRequestId = 0;" in app_js
+    assert "const requestId = ++runtimeRequestId;" in app_js
+    assert "if (requestId !== runtimeRequestId)" in app_js
+    assert "pollSelectedRuntimeUntilSettled(requestId)" in app_js
+
+
+def test_web_app_disables_generation_while_selected_model_loads() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "isSelectedRuntimeLoading()" in app_js
+    assert 'return "Loading model...";' in app_js
+    assert "playButton.disabled = isSelectedRuntimeLoading();" in app_js
+    assert "runtimeSelect.disabled = Boolean(timer);" in app_js
 
 
 def test_web_app_has_trail_speed_control() -> None:

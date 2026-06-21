@@ -17,6 +17,8 @@ let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
 let runNotice = "";
+let runtimeRequestId = 0;
+let runtimePollTimer = null;
 
 const TRAIL_SPEED_DELAYS_MS = {
   slow: 2200,
@@ -24,9 +26,12 @@ const TRAIL_SPEED_DELAYS_MS = {
   fast: 700,
 };
 
-async function loadRuntimeOptions() {
+async function loadRuntimeOptions({ requestId = runtimeRequestId } = {}) {
   const response = await fetch("/api/runtime");
   const payload = await response.json();
+  if (requestId !== runtimeRequestId) {
+    return null;
+  }
   currentRuntime = payload.selected;
 
   runtimeSelect.replaceChildren(
@@ -44,9 +49,16 @@ async function loadRuntimeOptions() {
   runtimeSelect.value = payload.selected_id;
   renderRuntimeStatus(payload.selected);
   renderPrompt();
+  if (isSelectedRuntimeLoading()) {
+    explanation.textContent = `Loading ${currentRuntime.model}...`;
+    pollSelectedRuntimeUntilSettled(requestId);
+  }
+  return payload;
 }
 
 async function selectRuntime() {
+  const requestId = ++runtimeRequestId;
+  clearTimeout(runtimePollTimer);
   const response = await fetch("/api/runtime/select", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -58,9 +70,16 @@ async function selectRuntime() {
     throw new Error(payload.error || "Runtime selection failed");
   }
 
+  if (requestId !== runtimeRequestId) {
+    return;
+  }
   currentRuntime = payload.selected;
   resetDemo({ restoreSelectedTrace: true });
   renderRuntimeStatus(payload.selected);
+  if (isSelectedRuntimeLoading()) {
+    explanation.textContent = `Loading ${currentRuntime.model}...`;
+    pollSelectedRuntimeUntilSettled(requestId);
+  }
 }
 
 function renderRuntimeStatus(runtime) {
@@ -74,8 +93,10 @@ function runtimeStatusLabel(option) {
   switch (option.status) {
     case "ready":
       return "ready";
-    case "running":
-      return "local files required";
+    case "loading":
+      return "loading";
+    case "idle":
+      return "select to load";
     case "unavailable":
       return "unavailable";
     default:
@@ -84,11 +105,42 @@ function runtimeStatusLabel(option) {
 }
 
 function updatePlayButton() {
+  runtimeSelect.disabled = Boolean(timer);
   if (timer) {
     return;
   }
   playButton.textContent = buttonLabelForRuntime();
-  playButton.disabled = false;
+  playButton.disabled = isSelectedRuntimeLoading();
+}
+
+function isSelectedRuntimeLoading() {
+  return Boolean(currentRuntime && currentRuntime.backend === "hf-trace" && currentRuntime.status === "loading");
+}
+
+function pollSelectedRuntimeUntilSettled(requestId) {
+  clearTimeout(runtimePollTimer);
+  runtimePollTimer = setTimeout(async () => {
+    if (requestId !== runtimeRequestId) {
+      return;
+    }
+
+    try {
+      const payload = await loadRuntimeOptions({ requestId });
+      if (!payload || requestId !== runtimeRequestId) {
+        return;
+      }
+      if (isSelectedRuntimeLoading()) {
+        explanation.textContent = `Loading ${currentRuntime.model}...`;
+        pollSelectedRuntimeUntilSettled(requestId);
+        return;
+      }
+      explanation.textContent = currentRuntime.status === "ready" ? `${currentRuntime.model} is ready.` : currentRuntime.notes;
+    } catch (error) {
+      if (requestId === runtimeRequestId) {
+        explanation.textContent = `Could not refresh runtime status: ${error}`;
+      }
+    }
+  }, 900);
 }
 
 async function loadTraceList() {
@@ -277,6 +329,11 @@ async function startDemo() {
   if (timer) {
     return;
   }
+  if (isSelectedRuntimeLoading()) {
+    updatePlayButton();
+    explanation.textContent = `Loading ${currentRuntime.model}...`;
+    return;
+  }
 
   if (currentRuntime && currentRuntime.backend !== "scripted") {
     playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
@@ -327,6 +384,9 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
 function buttonLabelForRuntime() {
   if (!currentRuntime || currentRuntime.backend === "scripted") {
     return "Start trail";
+  }
+  if (isSelectedRuntimeLoading()) {
+    return "Loading model...";
   }
   return currentRuntime.available ? "Generate live trail" : "Show prepared trail";
 }

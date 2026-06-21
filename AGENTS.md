@@ -64,6 +64,7 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 
 ## HF Trace Startup
 
-- `scripts/run.ps1` should start or detect the HF trace server, wait for `/health`, call `POST /api/warmup` for the configured default model, and only then start the Token Trail web app.
-- If warm-up fails, startup should fail visibly for the operator so scripted prepared traces can be used instead of surprising the first visitor with a model-load delay.
-- Keep `/health` fast; model preload belongs in `/api/warmup`.
+- `scripts/run.ps1` should start or detect the HF trace server, wait for `/health`, discover local models, and then start the Token Trail web app without waiting for a model to load.
+- The Token Trail web app should call `POST /api/warmup` for the selected HF trace model, including the default selected model, and surface loading/ready status in the runtime UX.
+- Live generation must stay disabled while the selected model is loading so generation does not race or become the accidental warm-up path.
+- Keep `/health` fast; model loading belongs in `/api/warmup`.

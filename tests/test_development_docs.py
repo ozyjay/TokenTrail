@@ -48,7 +48,7 @@ def test_main_docs_explain_hf_trace_is_core_dependency() -> None:
         assert "--candidate-source forward-logits" in document
 
 
-def test_docs_describe_hf_trace_as_primary_with_preload() -> None:
+def test_docs_describe_hf_trace_as_primary_with_selection_warmup() -> None:
     for relative_path in (
         "README.md",
         "docs/DEVELOPMENT_ENVIRONMENTS.md",
@@ -61,7 +61,8 @@ def test_docs_describe_hf_trace_as_primary_with_preload() -> None:
         assert "optional HF trace" not in document
         assert "loads on the first HF generation request" not in document
         assert "first HF generation request pays" not in document
-        assert "preload" in document.lower() or "preloads" in document.lower()
+        assert "loading/ready" in document
+        assert "selected model" in document
 
 
 def test_local_test_notes_include_hf_model_benchmark_table() -> None:

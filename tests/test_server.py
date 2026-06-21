@@ -37,9 +37,20 @@ class FakeHfTraceAdapter:
         trace: dict | None = None,
         error: bool = False,
         models: list[str] | None = None,
+        loaded_models: set[str] | None = None,
+        warmup_release: threading.Event | None = None,
     ) -> None:
         self.available = available
         self.models = models or ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"]
+        if loaded_models is not None:
+            self.loaded_models = set(loaded_models)
+        elif warmup_release is None:
+            self.loaded_models = set(self.models)
+        else:
+            self.loaded_models = set()
+        self.warmup_release = warmup_release
+        self.warmup_started = threading.Event()
+        self.warmup_calls = []
         self.trace = trace or {
             "mode": "hf-live-trace",
             "model": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -62,10 +73,19 @@ class FakeHfTraceAdapter:
     def status(self, **kwargs):
         import token_trail.adapters.hf_trace as hf_trace
 
-        return hf_trace.HfTraceStatus(available=self.available)
+        model = kwargs.get("model")
+        return hf_trace.HfTraceStatus(available=self.available, model_loaded=model in self.loaded_models)
 
     def available_models(self, *, timeout_seconds: float) -> list[str]:
         return self.models
+
+    def warmup(self, model: str, *, timeout_seconds: float) -> dict:
+        self.warmup_calls.append((model, timeout_seconds))
+        self.warmup_started.set()
+        if self.warmup_release is not None:
+            self.warmup_release.wait(timeout=2)
+        self.loaded_models.add(model)
+        return {"status": "ready", "model": model}
 
     def generate_trace(self, **kwargs) -> dict:
         self.generate_calls.append(kwargs)
@@ -144,7 +164,7 @@ def test_run_server_handles_ctrl_c_without_reraising(monkeypatch, capsys) -> Non
     assert instances[0].closed
 
 
-def test_build_server_state_marks_hf_trace_available_when_enabled_and_probe_succeeds() -> None:
+def test_build_server_state_lists_hf_trace_models_when_enabled_and_probe_succeeds() -> None:
     server = import_server_module()
     state = server.build_server_state(
         make_config(hf_trace_enabled=True),
@@ -153,7 +173,7 @@ def test_build_server_state_marks_hf_trace_available_when_enabled_and_probe_succ
 
     options = {option.id: option for option in state.runtime_options}
 
-    assert options["hf-trace:Qwen/Qwen2.5-1.5B-Instruct"].available
+    assert options["hf-trace:Qwen/Qwen2.5-1.5B-Instruct"].status == "ready"
 
 
 def test_runtime_and_health_endpoints_report_only_scripted_and_hf_trace() -> None:
@@ -181,6 +201,105 @@ def test_runtime_and_health_endpoints_report_only_scripted_and_hf_trace() -> Non
         "service": "token-trail",
         "runtime": "scripted:prepared-traces",
     }
+
+
+def test_runtime_endpoint_starts_default_hf_model_warmup_without_waiting() -> None:
+    server = import_server_module()
+    release_warmup = threading.Event()
+    hf_adapter = FakeHfTraceAdapter(available=True, warmup_release=release_warmup)
+    state = server.build_server_state(
+        make_config(backend="hf-trace", hf_trace_enabled=True),
+        hf_trace_adapter=hf_adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _get_json(f"http://127.0.0.1:{httpd.server_port}/api/runtime")
+        assert hf_adapter.warmup_started.wait(timeout=1)
+        selected = payload["selected"]
+        assert selected["id"] == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct"
+        assert selected["status"] == "loading"
+        assert selected["available"] is False
+
+        release_warmup.set()
+        for _ in range(20):
+            payload = _get_json(f"http://127.0.0.1:{httpd.server_port}/api/runtime")
+            if payload["selected"]["status"] == "ready":
+                break
+        assert payload["selected"]["status"] == "ready"
+        assert hf_adapter.warmup_calls == [("Qwen/Qwen2.5-1.5B-Instruct", 180.0)]
+    finally:
+        release_warmup.set()
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_selecting_hf_runtime_starts_only_one_warmup_for_that_model() -> None:
+    server = import_server_module()
+    release_warmup = threading.Event()
+    hf_adapter = FakeHfTraceAdapter(available=True, warmup_release=release_warmup)
+    state = server.build_server_state(
+        make_config(hf_trace_enabled=True),
+        hf_trace_adapter=hf_adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        base_url = f"http://127.0.0.1:{httpd.server_port}"
+        first = _post_json(
+            f"{base_url}/api/runtime/select",
+            {"runtime_id": "hf-trace:Qwen/Qwen2.5-0.5B-Instruct"},
+        )
+        second = _post_json(
+            f"{base_url}/api/runtime/select",
+            {"runtime_id": "hf-trace:Qwen/Qwen2.5-0.5B-Instruct"},
+        )
+
+        assert hf_adapter.warmup_started.wait(timeout=1)
+        assert first["selected"]["status"] == "loading"
+        assert second["selected"]["status"] == "loading"
+        assert hf_adapter.warmup_calls == [("Qwen/Qwen2.5-0.5B-Instruct", 180.0)]
+    finally:
+        release_warmup.set()
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_generate_trace_does_not_load_hf_model_when_selection_is_still_loading() -> None:
+    server = import_server_module()
+    release_warmup = threading.Event()
+    hf_adapter = FakeHfTraceAdapter(available=True, warmup_release=release_warmup)
+    state = server.build_server_state(
+        make_config(backend="hf-trace", hf_trace_enabled=True),
+        hf_trace_adapter=hf_adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        base_url = f"http://127.0.0.1:{httpd.server_port}"
+        _get_json(f"{base_url}/api/runtime")
+        assert hf_adapter.warmup_started.wait(timeout=1)
+        payload = _post_json(
+            f"{base_url}/api/generate-trace",
+            {"runtime_id": "hf-trace:Qwen/Qwen2.5-1.5B-Instruct", "trace_id": "robot-university"},
+            expected_status=409,
+        )
+    finally:
+        release_warmup.set()
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert "still loading" in payload["error"]
+    assert hf_adapter.generate_calls == []
 
 
 def test_warmup_route_is_removed() -> None:

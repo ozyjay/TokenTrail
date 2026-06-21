@@ -5,6 +5,7 @@ from token_trail.local_runner import (
     hf_trace_health_url,
     hf_trace_server_address,
     preload_hf_trace_model,
+    run_local_stack,
     resolve_hf_trace_models,
     should_manage_hf_trace,
 )
@@ -127,6 +128,26 @@ def test_preload_hf_trace_model_wraps_timeout_with_operator_guidance(monkeypatch
     assert "Qwen/Qwen2.5-0.5B-Instruct" in message
     assert "180 seconds" in message
     assert "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS" in message
+
+
+def test_run_local_stack_starts_app_without_preloading_hf_model(monkeypatch) -> None:
+    calls = []
+
+    monkeypatch.setattr("token_trail.local_runner.check_port_or_exit", lambda **kwargs: calls.append(("port", kwargs)))
+    monkeypatch.setattr("token_trail.local_runner.ensure_hf_trace_server", lambda config: None)
+    monkeypatch.setattr("token_trail.local_runner.resolve_hf_trace_models", lambda config: config)
+    monkeypatch.setattr(
+        "token_trail.local_runner.preload_hf_trace_model",
+        lambda config: (_ for _ in ()).throw(AssertionError("startup must not preload models")),
+    )
+    monkeypatch.setattr(
+        "token_trail.local_runner.run_server",
+        lambda host, port, config: calls.append(("run_server", host, port, config.hf_trace_model)),
+    )
+
+    run_local_stack(make_config())
+
+    assert calls[-1] == ("run_server", "127.0.0.1", 3100, "Qwen/Qwen2.5-0.5B-Instruct")
 
 
 def test_resolve_hf_trace_models_uses_runtime_local_models(monkeypatch) -> None:
