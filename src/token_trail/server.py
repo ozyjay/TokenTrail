@@ -254,14 +254,32 @@ def _config_with_runtime_hf_models(config: RuntimeConfig, adapter: HfTraceAdapte
     if not config.hf_trace_enabled:
         return config
     try:
-        return with_hf_trace_models(config, adapter.available_models(timeout_seconds=2.0))
+        discovery = adapter.models(timeout_seconds=2.0)
     except AdapterError:
         return config
+    models = tuple(entry["model"] for entry in discovery["models"])
+    if not models:
+        return config
+    selected = config.hf_trace_model if config.hf_trace_model in models else str(discovery["selected_model"])
+    return with_hf_trace_models(config, (selected, *models))
 
 
 def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[str, HfTraceStatus]:
     if not config.hf_trace_enabled:
         return {}
+
+    try:
+        discovery = adapter.models(timeout_seconds=2.0)
+        return {
+            entry["model"]: HfTraceStatus(
+                available=bool(entry["available"]),
+                model_loaded=bool(entry["loaded"]),
+                error=None if entry["available"] else str(entry["reason"]),
+            )
+            for entry in discovery["models"]
+        }
+    except AdapterError:
+        pass
 
     statuses: dict[str, HfTraceStatus] = {}
     for model in config.hf_trace_models:
@@ -275,8 +293,15 @@ def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[s
     return statuses
 
 
-def _runtime_status_payload(statuses: dict[str, HfTraceStatus]) -> dict[str, dict[str, bool]]:
-    return {model: {"available": status.available, "model_loaded": status.model_loaded} for model, status in statuses.items()}
+def _runtime_status_payload(statuses: dict[str, HfTraceStatus]) -> dict[str, dict]:
+    return {
+        model: {
+            "available": status.available,
+            "model_loaded": status.model_loaded,
+            "reason": status.error if status.error else ("Loaded" if status.model_loaded else "Available locally; not loaded"),
+        }
+        for model, status in statuses.items()
+    }
 
 
 def _runtime_status_payload_for_state(state: ServerState, statuses: dict[str, HfTraceStatus]) -> dict[str, dict]:

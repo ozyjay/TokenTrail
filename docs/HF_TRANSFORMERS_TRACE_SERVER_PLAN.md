@@ -13,7 +13,7 @@ The trace server returns Token Trail JSON with:
 - generated `steps`;
 - top returned `candidates` and `explanation` for each step.
 
-Token Trail validates the payload before replay. Normal operation is to start the HF trace server, discover local models, warm the selected model from the runtime selector, replay HF traces when the selected model is ready and returns clean output, then use scripted prepared traces as the mandatory fallback / secondary prepared mode if validation fails, generation is slow, the server is unavailable, the output is unstable, unreadable, confusing, or the generation does not reach a complete sentence after at least eight generated steps. The bars show top returned token alternatives from the local model, not private reasoning.
+Token Trail validates the payload before replay. Normal operation is to start the HF trace server, discover locally available configured models through `GET /api/models`, warm the selected available model through `POST /api/warmup`, start Token Trail, replay HF traces when the selected model returns clean output, then use scripted prepared traces as the mandatory fallback / secondary prepared mode if validation fails, generation is slow, the server is unavailable, the output is unstable, unreadable, confusing, or the generation does not reach a complete sentence after at least eight generated steps. The bars show top returned token alternatives from the local model, not private reasoning.
 
 ## Configuration
 
@@ -25,7 +25,7 @@ TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=96
 TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
 ```
 
-The HF trace server exposes locally installed models through `GET /api/models`. Token Trail uses that runtime list for selectable HF trace options instead of trusting a static model list.
+The HF trace server exposes configured model discovery through `GET /api/models`. The endpoint reports only candidates from `config/models.json` / `RuntimeConfig.hf_trace_models`; it does not scan and expose arbitrary Hugging Face cache contents.
 
 ## Probe Commands
 
@@ -35,7 +35,7 @@ Use forward logits for normal validation:
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
 
-HF trace server runtime loads are local-only. If a selected model is not already installed in the local Transformers/Hugging Face cache or provided as a local path, warm-up or generation should fail cleanly and Token Trail should use scripted prepared traces instead of downloading during the demo.
+HF trace server discovery and runtime loads are local-only. Discovery uses local cache metadata and must not download models or load full model weights. If a selected model is not already installed in the local Transformers/Hugging Face cache or provided as a local path, warm-up or generation should fail cleanly and Token Trail should use scripted prepared traces instead of downloading during the demo.
 
 Use generation-scores only for comparison or debugging:
 
@@ -51,4 +51,4 @@ Keep that suppression narrow to the known shutdown warning. Request failures, tr
 
 ## Startup Behaviour
 
-The local runner waits for the HF trace server `/health` endpoint, calls `GET /api/models`, then starts the Token Trail web app without waiting for a model to load. The web app calls `POST /api/warmup` for the selected discovered model, including the default selected model, and shows loading/ready status in the runtime UX. Warm-up loads the tokenizer and model into the server cache without generating a visible trace. It uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout. Live generation stays disabled until the selected model is ready so generation cannot race or become the accidental warm-up path.
+The local runner waits for the HF trace server `/health` endpoint, calls `GET /api/models`, selects the configured default model when it is locally available or the first available configured model otherwise, then calls `POST /api/warmup` before starting Token Trail. Warm-up loads the tokenizer and model into the server cache without generating a visible trace. It uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout. If no configured HF trace model is locally available, startup fails visibly so the operator can cache/download one configured model or run scripted prepared traces.

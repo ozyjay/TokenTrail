@@ -6,6 +6,23 @@ from token_trail.adapters.base import AdapterError
 from token_trail.adapters.hf_trace import HfTraceAdapter, _warmup_url_for_trace_url
 
 
+MODEL_DISCOVERY_PAYLOAD = {
+    "default_model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "selected_model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "models": [
+        {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "configured": True,
+            "cached": True,
+            "metadata_loadable": True,
+            "loaded": False,
+            "available": True,
+            "reason": "Available locally; not loaded",
+        }
+    ],
+}
+
+
 def http_error(status: int, payload: dict) -> HTTPError:
     return HTTPError(
         url="http://127.0.0.1:8600/api/trace",
@@ -114,12 +131,62 @@ def test_available_models_uses_models_endpoint() -> None:
 
     def opener(request, timeout):
         calls.append((request.full_url, request.get_method(), timeout))
-        return FakeResponse(status=200, body={"models": ["Qwen/Qwen2.5-3B-Instruct"]})
+        payload = dict(MODEL_DISCOVERY_PAYLOAD)
+        payload["models"] = [
+            dict(MODEL_DISCOVERY_PAYLOAD["models"][0]),
+            {
+                "model": "Qwen/Qwen2.5-3B-Instruct",
+                "configured": True,
+                "cached": False,
+                "metadata_loadable": False,
+                "loaded": False,
+                "available": False,
+                "reason": "Not found locally",
+            },
+        ]
+        return FakeResponse(status=200, body=payload)
 
     models = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).available_models(timeout_seconds=3)
 
-    assert models == ["Qwen/Qwen2.5-3B-Instruct"]
+    assert models == ["Qwen/Qwen2.5-0.5B-Instruct"]
     assert calls == [("http://127.0.0.1:8600/api/models", "GET", 3.0)]
+
+
+def test_models_uses_models_endpoint_and_parses_payload() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        calls.append((request.full_url, request.get_method(), timeout))
+        return FakeResponse(status=200, body=MODEL_DISCOVERY_PAYLOAD)
+
+    payload = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).models(timeout_seconds=3)
+
+    assert payload == MODEL_DISCOVERY_PAYLOAD
+    assert calls == [("http://127.0.0.1:8600/api/models", "GET", 3.0)]
+
+
+def test_models_reports_http_error() -> None:
+    def opener(request, timeout):
+        raise http_error(500, {"error": "boom"})
+
+    try:
+        HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).models(timeout_seconds=2)
+    except AdapterError as error:
+        assert "boom" in str(error)
+    else:
+        raise AssertionError("expected AdapterError")
+
+
+def test_models_reports_malformed_payload() -> None:
+    def opener(request, timeout):
+        return FakeResponse(status=200, body={"models": ["Qwen/Qwen2.5-0.5B-Instruct"]})
+
+    try:
+        HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).models(timeout_seconds=2)
+    except AdapterError as error:
+        assert "unexpected response" in str(error)
+    else:
+        raise AssertionError("expected AdapterError")
 
 
 def test_generate_trace_still_reports_incomplete_generation_as_error() -> None:

@@ -64,20 +64,22 @@ def build_runtime_options(
             model_available = bool(status_payload.get("available", hf_trace_available))
             model_loaded = bool(status_payload.get("model_loaded", False))
             model_loading = bool(status_payload.get("loading", False))
+            reason = status_payload.get("reason")
             if not model_available:
                 status = "unavailable"
-                notes = "Configured HF trace server is unavailable; scripted fallback remains available."
+                notes = reason if isinstance(reason, str) and reason else (
+                    "Configured HF trace server is unavailable; scripted fallback remains available."
+                )
             elif model_loaded:
                 status = "ready"
-                notes = "HF trace server is running and this model is ready."
+                notes = "Loaded and ready."
             elif model_loading:
                 model_available = False
                 status = "loading"
                 notes = "HF trace server is loading this model."
             else:
-                model_available = False
                 status = "idle"
-                notes = "Select this model to load it."
+                notes = "Available locally; will warm before use."
             options.append(
                 RuntimeOption(
                     id=f"hf-trace:{model}",

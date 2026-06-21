@@ -136,6 +136,16 @@ class HfTraceAdapter:
     def available_models(self, *, timeout_seconds: float) -> list[str]:
         """Return locally available HF trace models reported by the trace server."""
 
+        payload = self.models(timeout_seconds=timeout_seconds)
+        return [
+            entry["model"]
+            for entry in payload["models"]
+            if isinstance(entry, dict) and entry.get("available") is True and isinstance(entry.get("model"), str)
+        ]
+
+    def models(self, *, timeout_seconds: float = 2.0) -> dict:
+        """Return structured local model discovery from the HF trace server."""
+
         request = Request(_models_url_for_trace_url(self.trace_url), method="GET")
         try:
             with self._opener(request, timeout=float(timeout_seconds)) as response:
@@ -152,10 +162,9 @@ class HfTraceAdapter:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise AdapterError("HF trace model discovery returned invalid JSON") from error
 
-        models = payload.get("models") if isinstance(payload, dict) else None
-        if not isinstance(models, list) or not all(isinstance(model, str) and model.strip() for model in models):
+        if not _is_valid_models_payload(payload):
             raise AdapterError("HF trace model discovery returned an unexpected response")
-        return list(dict.fromkeys(model.strip() for model in models))
+        return payload
 
 
 def validate_trace_payload(trace: Any) -> None:
@@ -217,6 +226,31 @@ def _http_error_message(error: HTTPError) -> str:
 
 def _is_incomplete_trace_error(message: str) -> bool:
     return "complete sentence" in message
+
+
+def _is_valid_models_payload(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    if not isinstance(payload.get("default_model"), str) or not payload["default_model"].strip():
+        return False
+    if not isinstance(payload.get("selected_model"), str) or not payload["selected_model"].strip():
+        return False
+
+    models = payload.get("models")
+    if not isinstance(models, list):
+        return False
+    required_bool_keys = ("configured", "cached", "metadata_loadable", "loaded", "available")
+    for entry in models:
+        if not isinstance(entry, dict):
+            return False
+        if not isinstance(entry.get("model"), str) or not entry["model"].strip():
+            return False
+        if not isinstance(entry.get("reason"), str):
+            return False
+        for key in required_bool_keys:
+            if not isinstance(entry.get(key), bool):
+                return False
+    return True
 
 
 def _health_url_for_trace_url(trace_url: str, *, model: str | None = None) -> str:

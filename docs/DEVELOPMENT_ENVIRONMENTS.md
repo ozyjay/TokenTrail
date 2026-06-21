@@ -42,4 +42,4 @@ TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
 
 Token Trail binds to `127.0.0.1:3100` by default. The HF trace server binds to `127.0.0.1:8600` by default when managed by `scripts/run.ps1`.
 
-`scripts/run.ps1` waits for the HF trace server health endpoint, asks the HF trace server for locally installed models, and then starts the Token Trail web app without waiting for a model to load. The web app warms the selected HF runtime model through `POST /api/warmup`, shows loading/ready status, and keeps live generation disabled until that selected model is ready. Warm-up uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`; visitor generation still uses `TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS`.
+`scripts/run.ps1` waits for the HF trace server health endpoint, asks the HF trace server for locally available configured models with `GET /api/models`, warms the selected available model through `POST /api/warmup`, and then starts the Token Trail web app. Discovery does not download models or load full model weights. Warm-up uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`; visitor generation still uses `TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS`.

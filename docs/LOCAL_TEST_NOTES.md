@@ -33,14 +33,15 @@ Stopping the combined local stack prints the Token Trail and HF trace server sto
 
 ## 2026-06-20 — HF Trace Startup
 
-`scripts/run.ps1` starts the HF trace server, waits for `/health`, calls `GET /api/models` to discover locally installed models, and then starts the Token Trail web app without waiting for a model to load. The web app calls `POST /api/warmup` for the selected HF trace model, including the default selected model, and shows loading/ready status. Warm-up uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout.
+`scripts/run.ps1` starts the HF trace server, waits for `/health`, calls `GET /api/models` to discover locally available configured models, selects the configured default when available or the first available configured model otherwise, calls `POST /api/warmup`, and then starts the Token Trail web app. Discovery does not download models or load full model weights. Warm-up uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout.
 
 Normal operation is:
 
 1. Start the HF trace server.
-2. Warm the selected model from the runtime selector.
-3. Run HF trace mode when the selected model is ready.
-4. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
+2. Discover locally available configured models.
+3. Warm the selected available model.
+4. Run HF trace mode when the selected model is ready.
+5. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
 
 ## 2026-06-21 — Local HF Model Benchmarks
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -13,7 +14,7 @@ from urllib.request import urlopen
 
 from token_trail.adapters.base import AdapterError
 from token_trail.adapters.hf_trace import HfTraceAdapter
-from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config, with_hf_trace_models
+from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config
 from token_trail.ports import check_port_or_exit
 from token_trail.server import run_server
 
@@ -60,9 +61,7 @@ def run_local_stack(config: RuntimeConfig) -> None:
     try:
         if should_manage_hf_trace(config):
             hf_process = ensure_hf_trace_server(config)
-            config = resolve_hf_trace_models(config)
-            if not config.hf_trace_enabled:
-                print("No locally installed HF trace models found; scripted prepared traces remain available.")
+            config = discover_and_warm_hf_trace_model(config)
 
         print("Starting Token Trail using .env/default configuration...")
         run_server(host=config.host, port=config.port, config=config)
@@ -98,18 +97,53 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
     return process
 
 
-def resolve_hf_trace_models(config: RuntimeConfig) -> RuntimeConfig:
-    models = HfTraceAdapter(config.hf_trace_url).available_models(timeout_seconds=2.0)
-    resolved = with_hf_trace_models(config, models)
-    if resolved.hf_trace_enabled:
-        print("Discovered local HF trace models: " + ", ".join(resolved.hf_trace_models))
+def discover_and_warm_hf_trace_model(config: RuntimeConfig) -> RuntimeConfig:
+    adapter = HfTraceAdapter(config.hf_trace_url)
+    discovery = adapter.models(timeout_seconds=2.0)
+    configured_models = tuple(entry["model"] for entry in discovery["models"])
+    available_entries = [entry for entry in discovery["models"] if entry["available"]]
+    print("Discovered configured HF trace models:")
+    for entry in discovery["models"]:
+        status = "available" if entry["available"] else "unavailable"
+        loaded = ", loaded" if entry["loaded"] else ""
+        print(f"  - {entry['model']}: {status}{loaded} ({entry['reason']})")
+
+    selected = _select_hf_trace_model(config.hf_trace_model, available_entries)
+    if selected is None:
+        detail = "; ".join(f"{entry['model']}: {entry['reason']}" for entry in discovery["models"])
+        raise RuntimeError(
+            "No configured HF trace models are locally available. "
+            "Cache/download one configured model, choose scripted prepared traces, or update config/models.json. "
+            f"Discovery results: {detail}"
+        )
+
+    if selected != config.hf_trace_model:
+        print(f"Configured HF trace model {config.hf_trace_model} is unavailable; selecting {selected}.")
+    else:
+        print(f"Selected configured HF trace model: {selected}.")
+
+    resolved = replace(config, hf_trace_model=selected, hf_trace_models=configured_models)
+    preload_hf_trace_model(resolved, adapter=adapter)
     return resolved
 
 
-def preload_hf_trace_model(config: RuntimeConfig) -> None:
+def resolve_hf_trace_models(config: RuntimeConfig) -> RuntimeConfig:
+    return discover_and_warm_hf_trace_model(config)
+
+
+def _select_hf_trace_model(configured_default: str, available_entries: list[dict]) -> str | None:
+    for entry in available_entries:
+        if entry["model"] == configured_default:
+            return configured_default
+    if available_entries:
+        return str(available_entries[0]["model"])
+    return None
+
+
+def preload_hf_trace_model(config: RuntimeConfig, adapter: HfTraceAdapter | None = None) -> None:
     print(f"Preloading HF trace model {config.hf_trace_model}...")
     try:
-        HfTraceAdapter(config.hf_trace_url).warmup(
+        (adapter or HfTraceAdapter(config.hf_trace_url)).warmup(
             config.hf_trace_model,
             timeout_seconds=config.hf_trace_warmup_timeout_seconds,
         )

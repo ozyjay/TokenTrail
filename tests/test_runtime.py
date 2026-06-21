@@ -29,8 +29,16 @@ def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
     options = build_runtime_options(
         make_config(hf_trace_enabled=True),
         hf_trace_statuses={
-            "Qwen/Qwen2.5-1.5B-Instruct": {"available": True, "model_loaded": True},
-            "Qwen/Qwen2.5-0.5B-Instruct": {"available": True, "model_loaded": False},
+            "Qwen/Qwen2.5-1.5B-Instruct": {
+                "available": True,
+                "model_loaded": True,
+                "reason": "Loaded",
+            },
+            "Qwen/Qwen2.5-0.5B-Instruct": {
+                "available": True,
+                "model_loaded": False,
+                "reason": "Available locally; not loaded",
+            },
         },
     )
 
@@ -40,10 +48,28 @@ def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
         "hf-trace:Qwen/Qwen2.5-0.5B-Instruct",
     ]
     assert [option.backend for option in options] == ["scripted", "hf-trace", "hf-trace"]
-    assert [option.available for option in options] == [True, True, False]
+    assert [option.available for option in options] == [True, True, True]
     assert [option.status for option in options] == ["ready", "ready", "idle"]
-    assert options[1].notes == "HF trace server is running and this model is ready."
-    assert options[2].notes == "Select this model to load it."
+    assert options[1].notes == "Loaded and ready."
+    assert options[2].notes == "Available locally; will warm before use."
+
+
+def test_hf_trace_options_show_missing_configured_model_reason() -> None:
+    options = build_runtime_options(
+        make_config(hf_trace_enabled=True),
+        hf_trace_statuses={
+            "Qwen/Qwen2.5-1.5B-Instruct": {
+                "available": False,
+                "model_loaded": False,
+                "reason": "Configured but not found locally",
+            },
+        },
+    )
+    hf_option = next(option for option in options if option.model == "Qwen/Qwen2.5-1.5B-Instruct")
+
+    assert not hf_option.available
+    assert hf_option.status == "unavailable"
+    assert hf_option.notes == "Configured but not found locally"
 
 
 def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:

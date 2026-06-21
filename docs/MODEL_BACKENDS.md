@@ -10,9 +10,10 @@ Token Trail supports two runtime families:
 The HF trace server is the only live backend. The app does not expose paragraph-only live generation or other live runtime families. Normal operation is:
 
 1. Start the HF trace server.
-2. Warm the selected model from the runtime selector and show loading/ready status.
-3. Run HF trace mode when the selected model is ready.
-4. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
+2. Discover locally available configured models through `GET /api/models`.
+3. Warm the selected available model through `POST /api/warmup`.
+4. Run HF trace mode when the selected model is ready.
+5. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
 
 ## HF Trace Contract
 
@@ -32,4 +33,4 @@ The server keeps only generated steps through the first complete sentence after 
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 ```
 
-Runtime-selectable HF trace models are discovered from the local Hugging Face cache through the HF trace server. `TOKEN_TRAIL_HF_TRACE_MODEL` is a preferred initial model only when it is already installed locally.
+Runtime-selectable HF trace models are configured in `config/models.json`. The HF trace server reports which configured models are locally available through `GET /api/models`; discovery does not download models or load full model weights. `TOKEN_TRAIL_HF_TRACE_MODEL` is a preferred initial model only when it is already installed locally.

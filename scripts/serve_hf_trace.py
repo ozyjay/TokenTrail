@@ -23,6 +23,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from token_trail.adapters.base import AdapterError  # noqa: E402
 from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
+from token_trail.config import RuntimeConfig, load_config  # noqa: E402
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -123,10 +124,44 @@ class TransformersTraceRunner:
     def list_local_models(self) -> list[str]:
         return self._probe.list_local_models()
 
+    def discover_model(self, model: str) -> dict[str, Any]:
+        if self.is_model_loaded(model):
+            return {
+                "cached": True,
+                "metadata_loadable": True,
+                "available": True,
+                "reason": "Loaded",
+            }
+
+        try:
+            cached = model in self._probe.list_local_models()
+        except Exception as error:
+            return {
+                "cached": False,
+                "metadata_loadable": False,
+                "available": False,
+                "reason": str(error),
+            }
+
+        if cached:
+            return {
+                "cached": True,
+                "metadata_loadable": True,
+                "available": True,
+                "reason": "Available locally; not loaded",
+            }
+        return {
+            "cached": False,
+            "metadata_loadable": False,
+            "available": False,
+            "reason": "Not found locally",
+        }
+
 
 @dataclass
 class HfTraceServerState:
     trace_runner: Any
+    config: RuntimeConfig
 
 
 class HfTraceHTTPServer(ThreadingHTTPServer):
@@ -150,8 +185,7 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
             self._send_json(payload)
             return
         if parsed.path == "/api/models":
-            list_local_models = getattr(self.server.state.trace_runner, "list_local_models", lambda: [])
-            self._send_json({"models": list_local_models()})
+            self._send_json(build_model_discovery_payload(self.server.state.config, self.server.state.trace_runner))
             return
         self._send_json({"error": "Not found"}, status=404)
 
@@ -221,8 +255,70 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-def create_server(server_address: tuple[str, int], trace_runner: Any | None = None) -> HfTraceHTTPServer:
-    return HfTraceHTTPServer(server_address, HfTraceServerState(trace_runner or TransformersTraceRunner()))
+def build_model_discovery_payload(config: RuntimeConfig, trace_runner: Any) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for model in config.hf_trace_models:
+        loaded = bool(getattr(trace_runner, "is_model_loaded", lambda value: False)(model))
+        try:
+            raw_discovery = getattr(trace_runner, "discover_model", _fallback_discover_model)(model)
+        except Exception as error:
+            raw_discovery = {
+                "cached": False,
+                "metadata_loadable": False,
+                "available": False,
+                "reason": str(error),
+            }
+
+        cached = bool(raw_discovery.get("cached", False))
+        metadata_loadable = bool(raw_discovery.get("metadata_loadable", False))
+        available = bool(raw_discovery.get("available", loaded or (cached and metadata_loadable)))
+        reason = raw_discovery.get("reason")
+        if loaded:
+            cached = True
+            metadata_loadable = True
+            available = True
+            reason = "Loaded"
+        elif not isinstance(reason, str) or not reason:
+            reason = "Available locally; not loaded" if available else "Not found locally"
+
+        entries.append(
+            {
+                "model": model,
+                "configured": True,
+                "cached": cached,
+                "metadata_loadable": metadata_loadable,
+                "loaded": loaded,
+                "available": available,
+                "reason": reason,
+            }
+        )
+
+    selected = config.hf_trace_model
+    if not any(entry["model"] == selected and entry["available"] for entry in entries):
+        selected = next((entry["model"] for entry in entries if entry["available"]), config.hf_trace_model)
+
+    return {
+        "default_model": config.hf_trace_model,
+        "selected_model": selected,
+        "models": entries,
+    }
+
+
+def _fallback_discover_model(model: str) -> dict[str, Any]:
+    return {
+        "cached": False,
+        "metadata_loadable": False,
+        "available": False,
+        "reason": "Model discovery is not supported by this trace runner",
+    }
+
+
+def create_server(
+    server_address: tuple[str, int],
+    trace_runner: Any | None = None,
+    config: RuntimeConfig | None = None,
+) -> HfTraceHTTPServer:
+    return HfTraceHTTPServer(server_address, HfTraceServerState(trace_runner or TransformersTraceRunner(), config or load_config()))
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

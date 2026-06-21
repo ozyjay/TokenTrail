@@ -7,6 +7,8 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from token_trail.config import RuntimeConfig
+
 
 SCRIPT_PATH = Path(__file__).resolve().parents[1] / "scripts" / "serve_hf_trace.py"
 
@@ -53,6 +55,39 @@ class FakeTraceRunner:
 
     def list_local_models(self) -> list[str]:
         return ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]
+
+    def discover_model(self, model: str) -> dict:
+        loaded = model in self.loaded_models
+        cached = model in {"Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"}
+        return {
+            "cached": cached,
+            "metadata_loadable": cached,
+            "available": loaded or cached,
+            "reason": "Loaded" if loaded else ("Available locally; not loaded" if cached else "Not found locally"),
+        }
+
+
+def make_config() -> RuntimeConfig:
+    return RuntimeConfig(
+        backend="hf-trace",
+        host="127.0.0.1",
+        port=3100,
+        backend_port=8100,
+        model_config_path="config/models.json",
+        hf_trace_enabled=True,
+        hf_trace_url="http://127.0.0.1:8600/api/trace",
+        hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
+        hf_trace_models=(
+            "Qwen/Qwen2.5-0.5B-Instruct",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            "Qwen/Qwen2.5-3B-Instruct",
+        ),
+        hf_trace_top_k=5,
+        hf_trace_max_new_tokens=96,
+        hf_trace_temperature=0.3,
+        hf_trace_timeout_seconds=20,
+        hf_trace_warmup_timeout_seconds=180,
+    )
 
 
 def post_json(url: str, payload: dict) -> dict:
@@ -271,9 +306,11 @@ def test_hf_trace_health_reports_model_warm_status() -> None:
     assert cold_payload["model_loaded"] is False
 
 
-def test_hf_trace_server_lists_local_models() -> None:
+def test_hf_trace_server_lists_configured_model_discovery() -> None:
     server = load_server_module()
-    httpd = server.create_server(("127.0.0.1", 0), trace_runner=FakeTraceRunner())
+    runner = FakeTraceRunner()
+    runner.loaded_models.add("Qwen/Qwen2.5-1.5B-Instruct")
+    httpd = server.create_server(("127.0.0.1", 0), trace_runner=runner, config=make_config())
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     thread.start()
 
@@ -285,7 +322,44 @@ def test_hf_trace_server_lists_local_models() -> None:
         httpd.server_close()
         thread.join(timeout=5)
 
-    assert payload == {"models": ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]}
+    assert payload["default_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert payload["selected_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
+    assert [entry["model"] for entry in payload["models"]] == [
+        "Qwen/Qwen2.5-0.5B-Instruct",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "Qwen/Qwen2.5-3B-Instruct",
+    ]
+    assert payload["models"][0] == {
+        "model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "configured": True,
+        "cached": True,
+        "metadata_loadable": True,
+        "loaded": False,
+        "available": True,
+        "reason": "Available locally; not loaded",
+    }
+    assert payload["models"][1]["loaded"] is True
+    assert payload["models"][1]["reason"] == "Loaded"
+    assert payload["models"][2]["available"] is False
+    assert payload["models"][2]["reason"] == "Not found locally"
+    assert runner.preload_calls == []
+    assert runner.calls == []
+
+
+def test_model_discovery_handles_cache_errors_without_loading() -> None:
+    server = load_server_module()
+
+    class FailingDiscoveryRunner(FakeTraceRunner):
+        def discover_model(self, model: str) -> dict:
+            raise RuntimeError("cache metadata unavailable")
+
+    runner = FailingDiscoveryRunner()
+    payload = server.build_model_discovery_payload(make_config(), runner)
+
+    assert [entry["available"] for entry in payload["models"]] == [False, False, False]
+    assert payload["models"][0]["reason"] == "cache metadata unavailable"
+    assert runner.preload_calls == []
+    assert runner.calls == []
 
 
 def test_hf_trace_server_rejects_bad_requests() -> None:

@@ -25,13 +25,40 @@ def make_config(
         hf_trace_enabled=hf_trace_enabled,
         hf_trace_url=hf_trace_url,
         hf_trace_model="Qwen/Qwen2.5-0.5B-Instruct",
-        hf_trace_models=("Qwen/Qwen2.5-0.5B-Instruct",),
+        hf_trace_models=("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"),
         hf_trace_top_k=5,
         hf_trace_max_new_tokens=96,
         hf_trace_temperature=0.3,
         hf_trace_timeout_seconds=20,
         hf_trace_warmup_timeout_seconds=180,
     )
+
+
+def discovery_payload(*, default_available: bool = True, fallback_available: bool = True) -> dict:
+    return {
+        "default_model": "Qwen/Qwen2.5-0.5B-Instruct",
+        "selected_model": "Qwen/Qwen2.5-0.5B-Instruct" if default_available else "Qwen/Qwen2.5-1.5B-Instruct",
+        "models": [
+            {
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "configured": True,
+                "cached": default_available,
+                "metadata_loadable": default_available,
+                "loaded": False,
+                "available": default_available,
+                "reason": "Available locally; not loaded" if default_available else "Not found locally",
+            },
+            {
+                "model": "Qwen/Qwen2.5-1.5B-Instruct",
+                "configured": True,
+                "cached": fallback_available,
+                "metadata_loadable": fallback_available,
+                "loaded": False,
+                "available": fallback_available,
+                "reason": "Available locally; not loaded" if fallback_available else "Not found locally",
+            },
+        ],
+    }
 
 
 def test_should_manage_hf_trace_only_for_enabled_hf_backend() -> None:
@@ -130,16 +157,25 @@ def test_preload_hf_trace_model_wraps_timeout_with_operator_guidance(monkeypatch
     assert "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS" in message
 
 
-def test_run_local_stack_starts_app_without_preloading_hf_model(monkeypatch) -> None:
+def test_run_local_stack_warms_default_model_before_starting_app(monkeypatch) -> None:
     calls = []
 
     monkeypatch.setattr("token_trail.local_runner.check_port_or_exit", lambda **kwargs: calls.append(("port", kwargs)))
     monkeypatch.setattr("token_trail.local_runner.ensure_hf_trace_server", lambda config: None)
-    monkeypatch.setattr("token_trail.local_runner.resolve_hf_trace_models", lambda config: config)
-    monkeypatch.setattr(
-        "token_trail.local_runner.preload_hf_trace_model",
-        lambda config: (_ for _ in ()).throw(AssertionError("startup must not preload models")),
-    )
+
+    class FakeAdapter:
+        def __init__(self, trace_url):
+            calls.append(("init", trace_url))
+
+        def models(self, *, timeout_seconds):
+            calls.append(("models", timeout_seconds))
+            return discovery_payload(default_available=True)
+
+        def warmup(self, model, *, timeout_seconds):
+            calls.append(("warmup", model, timeout_seconds))
+            return {"status": "ready", "model": model}
+
+    monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
     monkeypatch.setattr(
         "token_trail.local_runner.run_server",
         lambda host, port, config: calls.append(("run_server", host, port, config.hf_trace_model)),
@@ -147,20 +183,66 @@ def test_run_local_stack_starts_app_without_preloading_hf_model(monkeypatch) -> 
 
     run_local_stack(make_config())
 
+    assert ("warmup", "Qwen/Qwen2.5-0.5B-Instruct", 180) in calls
     assert calls[-1] == ("run_server", "127.0.0.1", 3100, "Qwen/Qwen2.5-0.5B-Instruct")
 
 
-def test_resolve_hf_trace_models_uses_runtime_local_models(monkeypatch) -> None:
+def test_run_local_stack_warms_first_available_when_default_missing(monkeypatch) -> None:
+    calls = []
+
     class FakeAdapter:
         def __init__(self, trace_url):
             pass
 
-        def available_models(self, *, timeout_seconds):
-            return ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]
+        def models(self, *, timeout_seconds):
+            return discovery_payload(default_available=False, fallback_available=True)
 
+        def warmup(self, model, *, timeout_seconds):
+            calls.append(("warmup", model, timeout_seconds))
+            return {"status": "ready", "model": model}
+
+    monkeypatch.setattr("token_trail.local_runner.check_port_or_exit", lambda **kwargs: None)
+    monkeypatch.setattr("token_trail.local_runner.ensure_hf_trace_server", lambda config: None)
     monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
+    monkeypatch.setattr(
+        "token_trail.local_runner.run_server",
+        lambda host, port, config: calls.append(("run_server", config.hf_trace_model, config.hf_trace_models)),
+    )
 
-    config = resolve_hf_trace_models(make_config())
+    run_local_stack(make_config())
 
-    assert config.hf_trace_model == "Qwen/Qwen2.5-3B-Instruct"
-    assert config.hf_trace_models == ("Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")
+    assert calls == [
+        ("warmup", "Qwen/Qwen2.5-1.5B-Instruct", 180),
+        (
+            "run_server",
+            "Qwen/Qwen2.5-1.5B-Instruct",
+            ("Qwen/Qwen2.5-0.5B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"),
+        ),
+    ]
+
+
+def test_run_local_stack_fails_when_no_configured_hf_model_is_available(monkeypatch) -> None:
+    class FakeAdapter:
+        def __init__(self, trace_url):
+            pass
+
+        def models(self, *, timeout_seconds):
+            return discovery_payload(default_available=False, fallback_available=False)
+
+    monkeypatch.setattr("token_trail.local_runner.check_port_or_exit", lambda **kwargs: None)
+    monkeypatch.setattr("token_trail.local_runner.ensure_hf_trace_server", lambda config: None)
+    monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
+    monkeypatch.setattr(
+        "token_trail.local_runner.run_server",
+        lambda host, port, config: (_ for _ in ()).throw(AssertionError("app should not start")),
+    )
+
+    try:
+        run_local_stack(make_config())
+    except RuntimeError as error:
+        message = str(error)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+    assert "No configured HF trace models are locally available" in message
+    assert "Qwen/Qwen2.5-0.5B-Instruct: Not found locally" in message

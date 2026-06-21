@@ -41,11 +41,11 @@ class FakeHfTraceAdapter:
         warmup_release: threading.Event | None = None,
     ) -> None:
         self.available = available
-        self.models = models or ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"]
+        self.model_names = models or ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"]
         if loaded_models is not None:
             self.loaded_models = set(loaded_models)
         elif warmup_release is None:
-            self.loaded_models = set(self.models)
+            self.loaded_models = set(self.model_names)
         else:
             self.loaded_models = set()
         self.warmup_release = warmup_release
@@ -77,7 +77,27 @@ class FakeHfTraceAdapter:
         return hf_trace.HfTraceStatus(available=self.available, model_loaded=model in self.loaded_models)
 
     def available_models(self, *, timeout_seconds: float) -> list[str]:
-        return self.models
+        return [model for model in self.model_names if self.available]
+
+    def models(self, *, timeout_seconds: float) -> dict:
+        return {
+            "default_model": "Qwen/Qwen2.5-1.5B-Instruct",
+            "selected_model": "Qwen/Qwen2.5-1.5B-Instruct",
+            "models": [
+                {
+                    "model": model,
+                    "configured": True,
+                    "cached": self.available,
+                    "metadata_loadable": self.available,
+                    "loaded": model in self.loaded_models,
+                    "available": self.available,
+                    "reason": "Loaded" if model in self.loaded_models else (
+                        "Available locally; not loaded" if self.available else "Not found locally"
+                    ),
+                }
+                for model in self.model_names
+            ],
+        }
 
     def warmup(self, model: str, *, timeout_seconds: float) -> dict:
         self.warmup_calls.append((model, timeout_seconds))
