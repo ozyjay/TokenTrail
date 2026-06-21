@@ -13,6 +13,7 @@ def test_required_project_files_exist() -> None:
         ".python-version",
         "README.md",
         "config/models.json",
+        "config/instructions/hf_trace_default.txt",
         "scripts/setup.ps1",
         "scripts/clean.ps1",
         "scripts/test.ps1",

@@ -22,7 +22,7 @@ pwsh -NoProfile -File ./scripts/run.ps1
 
 Normal operation is HF trace first when the server is healthy and the selected configured model has been warmed. If HF trace mode is slow, unavailable, not ready, unstable, unreadable, confusing, or returns an incomplete generation, use scripted prepared traces. The scripted fallback is mandatory for public reliability.
 
-Staff line: This live mode asks a small local model to continue the prompt. The bars show top returned token alternatives, not private reasoning.
+Staff line: The model also receives a fixed instruction prompt to keep responses short and suitable for the demo. The bars show top returned token alternatives, not private reasoning.
 
 ## Go/No-Go
 

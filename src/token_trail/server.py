@@ -181,6 +181,7 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             try:
                 hf_trace = state.hf_trace_adapter.generate_trace(
                     prompt=live_prompt,
+                    instructions=state.config.hf_trace_instructions,
                     model=runtime.model,
                     max_new_tokens=state.config.hf_trace_max_new_tokens,
                     top_k=state.config.hf_trace_top_k,

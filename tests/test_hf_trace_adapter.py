@@ -208,3 +208,38 @@ def test_generate_trace_still_reports_incomplete_generation_as_error() -> None:
         assert "complete sentence" in str(error)
     else:
         raise AssertionError("expected AdapterError")
+
+
+def test_generate_trace_includes_instructions_when_provided() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        calls.append(json.loads(request.data.decode("utf-8")))
+        return FakeResponse(
+            status=200,
+            body={
+                "mode": "hf-live-trace",
+                "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                "prompt": "Write one sentence.",
+                "prompt_tokens": ["Write", " one", " sentence", "."],
+                "steps": [
+                    {
+                        "selected_token": "A",
+                        "candidates": [{"token": "A", "probability": 0.8}],
+                        "explanation": "Top returned alternatives from the local model for this token position.",
+                    }
+                ],
+            },
+        )
+
+    HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).generate_trace(
+        prompt="Write one sentence.",
+        instructions="Use one short sentence.",
+        model="Qwen/Qwen2.5-0.5B-Instruct",
+        max_new_tokens=1,
+        top_k=1,
+        temperature=0,
+        timeout_seconds=2,
+    )
+
+    assert calls[0]["instructions"] == "Use one short sentence."

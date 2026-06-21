@@ -73,6 +73,7 @@ class TransformersTraceRunner:
         self,
         *,
         prompt: str,
+        instructions: str = "",
         model: str,
         max_new_tokens: int,
         top_k: int,
@@ -85,6 +86,7 @@ class TransformersTraceRunner:
                 model=loaded_model,
                 torch_module=self._torch,
                 prompt=prompt,
+                instructions=instructions,
                 max_new_tokens=max_new_tokens,
                 temperature=temperature,
             )
@@ -257,8 +259,10 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
         if len(prompt) > MAX_PROMPT_CHARS:
             raise HfTraceServerError(f"prompt must be {MAX_PROMPT_CHARS} characters or fewer")
         model = _required_string(payload, "model")
+        instructions = _optional_string(payload, "instructions") or self.server.state.config.hf_trace_instructions
         return {
             "prompt": prompt,
+            "instructions": instructions,
             "model": model,
             "max_new_tokens": _int_setting(payload, "max_new_tokens", 24, minimum=1),
             "top_k": _int_setting(payload, "top_k", 5, minimum=1),
@@ -398,6 +402,18 @@ def _required_string(payload: Any, key: str) -> str:
     value = payload.get(key)
     if not isinstance(value, str) or not value.strip():
         raise HfTraceServerError(f"Request body is missing required string: {key}")
+    return value.strip()
+
+
+def _optional_string(payload: Any, key: str) -> str:
+    if not isinstance(payload, dict):
+        raise HfTraceServerError("Request body must be a JSON object")
+
+    value = payload.get(key, "")
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise HfTraceServerError(f"{key} must be a string")
     return value.strip()
 
 

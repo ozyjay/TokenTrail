@@ -51,7 +51,8 @@ pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-lo
 - Scripted mode remains the mandatory fallback and secondary prepared mode, and should keep curated prompts static.
 - Resetting or switching into scripted mode must re-render the curated prompt view, hide the prompt editor, and restore the selected prepared trace.
 - Available HF trace runtimes should expose an editable prompt box.
-- HF trace mode returns replayable `hf-live-trace` data with model-tokenised `prompt_tokens`; after generation, show those returned tokens rather than word-split preview tokens.
+- HF trace mode sends the fixed hidden instruction prompt from `config/instructions/hf_trace_default.txt` to keep public responses short and suitable for the demo.
+- HF trace mode returns replayable `hf-live-trace` data with model-tokenised `prompt_tokens`; after generation, show those returned tokens rather than word-split preview tokens. `prompt_tokens` should represent the staff-entered prompt, not the hidden instruction prompt.
 - HF traces should finish at a complete sentence or fall back to scripted mode if HF trace fails, is too slow, or is not ready.
 - Public wording should describe candidate bars as top returned alternatives from the local model, not private reasoning.
 - The generated output area should use available horizontal browser space and avoid forcing page-level scrolling for normal live output.

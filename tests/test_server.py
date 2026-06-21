@@ -13,6 +13,7 @@ def make_config(
     *,
     hf_trace_enabled: bool = False,
     hf_trace_timeout_seconds: float = 20.0,
+    hf_trace_instructions: str = "Use one short sentence.",
 ) -> RuntimeConfig:
     return RuntimeConfig(
         backend=backend,
@@ -27,6 +28,7 @@ def make_config(
         hf_trace_max_new_tokens=96,
         hf_trace_temperature=0.3,
         hf_trace_timeout_seconds=hf_trace_timeout_seconds,
+        hf_trace_instructions=hf_trace_instructions,
     )
 
 
@@ -375,6 +377,7 @@ def test_generate_trace_returns_hf_live_trace_response_using_custom_prompt() -> 
     assert hf_adapter.generate_calls == [
         {
             "prompt": "Explain tokenisation with a tiny campus story.",
+            "instructions": "Use one short sentence.",
             "model": "Qwen/Qwen2.5-1.5B-Instruct",
             "max_new_tokens": 96,
             "top_k": 5,
@@ -382,6 +385,52 @@ def test_generate_trace_returns_hf_live_trace_response_using_custom_prompt() -> 
             "timeout_seconds": 7.5,
         }
     ]
+
+
+def test_hf_trace_response_keeps_prompt_tokens_visible_prompt_only() -> None:
+    server = import_server_module()
+    hf_adapter = FakeHfTraceAdapter(
+        trace={
+            "mode": "hf-live-trace",
+            "model": "Qwen/Qwen2.5-1.5B-Instruct",
+            "prompt": "Explain tokenisation simply.",
+            "prompt_tokens": ["Explain", " tokenisation", " simply", "."],
+            "instruction_prompt_applied": True,
+            "steps": [
+                {
+                    "selected_token": "Tokens",
+                    "candidates": [{"token": "Tokens", "probability": 0.62}],
+                    "explanation": "Top returned alternatives from the local model for this token position.",
+                }
+            ],
+        }
+    )
+    state = server.build_server_state(
+        make_config(backend="hf-trace", hf_trace_enabled=True, hf_trace_instructions="Hidden Open Day instruction."),
+        hf_trace_adapter=hf_adapter,
+    )
+    httpd = server.TokenTrailServer(("127.0.0.1", 0), state)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        payload = _post_json(
+            f"http://127.0.0.1:{httpd.server_port}/api/generate-trace",
+            {
+                "runtime_id": "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
+                "trace_id": "robot-university",
+                "prompt": "Explain tokenisation simply.",
+            },
+        )
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload["trace"]["prompt"] == "Explain tokenisation simply."
+    assert payload["trace"]["prompt_tokens"] == ["Explain", " tokenisation", " simply", "."]
+    assert "Hidden" not in "".join(payload["trace"]["prompt_tokens"])
+    assert payload["trace"]["instruction_prompt_applied"] is True
 
 
 def test_generate_trace_uses_selected_hf_trace_model() -> None:

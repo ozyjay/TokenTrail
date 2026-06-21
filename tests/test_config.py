@@ -1,4 +1,4 @@
-from token_trail.config import load_config
+from token_trail.config import DEFAULT_HF_TRACE_INSTRUCTIONS, load_config
 
 
 class FakeEnvFile:
@@ -27,6 +27,7 @@ def clear_token_trail_env(monkeypatch) -> None:
         "TOKEN_TRAIL_HF_TRACE_TEMPERATURE",
         "TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS",
         "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE",
         "TOKEN_TRAIL_MODEL_CONFIG_PATH",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -50,6 +51,7 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.hf_trace_temperature == 0.3
     assert config.hf_trace_timeout_seconds == 20.0
     assert config.hf_trace_warmup_timeout_seconds == 180.0
+    assert config.hf_trace_instructions == DEFAULT_HF_TRACE_INSTRUCTIONS
 
 
 def test_config_reads_environment_overrides(monkeypatch) -> None:
@@ -84,6 +86,17 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.hf_trace_temperature == 0.1
     assert config.hf_trace_timeout_seconds == 6.5
     assert config.hf_trace_warmup_timeout_seconds == 90.0
+
+
+def test_config_loads_hf_trace_instructions_file(monkeypatch, tmp_path) -> None:
+    clear_token_trail_env(monkeypatch)
+    instructions = tmp_path / "hf_trace_default.txt"
+    instructions.write_text("Use one crisp sentence.\n", encoding="utf-8")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE", str(instructions))
+
+    config = load_config(env_file=None)
+
+    assert config.hf_trace_instructions == "Use one crisp sentence."
 
 
 def test_config_reads_env_file(monkeypatch) -> None:

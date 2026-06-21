@@ -13,7 +13,7 @@ The trace server returns Token Trail JSON with:
 - generated `steps`;
 - top returned `candidates` and `explanation` for each step.
 
-Token Trail validates the payload before replay. Normal operation is to start the HF trace server, discover locally available configured models through `GET /api/models`, warm the selected available model through `POST /api/warmup`, start Token Trail, replay HF traces when the selected model returns clean output, then use scripted prepared traces as the mandatory fallback / secondary prepared mode if validation fails, generation is slow, the server is unavailable, the output is unstable, unreadable, confusing, or the generation does not reach a complete sentence after at least eight generated steps. The bars show top returned token alternatives from the local model, not private reasoning.
+Token Trail validates the payload before replay. Normal operation is to start the HF trace server, discover locally available configured models through `GET /api/models`, warm the selected available model through `POST /api/warmup`, start Token Trail, replay HF traces when the selected model returns clean output, then use scripted prepared traces as the mandatory fallback / secondary prepared mode if validation fails, generation is slow, the server is unavailable, the output is unstable, unreadable, confusing, or the generation does not reach a complete sentence after at least eight generated steps. The model also receives a fixed instruction prompt to keep responses short and suitable for the demo. The bars show top returned token alternatives, not private reasoning.
 
 ## Configuration
 
@@ -23,9 +23,12 @@ TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=96
 TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
+TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE=config/instructions/hf_trace_default.txt
 ```
 
 The HF trace server exposes configured model discovery through `GET /api/models`. The endpoint reports only candidates from `config/models.json` / `RuntimeConfig.hf_trace_models`; it does not scan and expose arbitrary Hugging Face cache contents.
+
+The default instruction prompt lives in `config/instructions/hf_trace_default.txt`. It is sent as a hidden system instruction through chat templates when the tokenizer supports them, or through a plain text wrapper otherwise. The trace payload keeps `prompt` and `prompt_tokens` tied to the staff-entered prompt, not the hidden instruction text.
 
 ## Probe Commands
 

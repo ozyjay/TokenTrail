@@ -106,6 +106,7 @@ def test_benchmark_discovers_configured_models_warms_then_times_trace() -> None:
     results = benchmark.run_benchmark(
         trace_url="http://127.0.0.1:8600/api/trace",
         prompts=["Open Day prompt"],
+        instructions="Use one short sentence.",
         timeout_seconds=5,
         max_new_tokens=24,
         top_k=5,
@@ -121,6 +122,7 @@ def test_benchmark_discovers_configured_models_warms_then_times_trace() -> None:
     assert request_bodies[0] == {"model": "Qwen/Qwen2.5-0.5B-Instruct"}
     assert request_bodies[1]["model"] == "Qwen/Qwen2.5-0.5B-Instruct"
     assert request_bodies[1]["prompt"] == "Open Day prompt"
+    assert request_bodies[1]["instructions"] == "Use one short sentence."
     assert "candidate_source" not in request_bodies[1]
     assert results[0] == {
         "model": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -162,6 +164,7 @@ def test_benchmark_records_unavailable_configured_model_without_warmup() -> None
     results = benchmark.run_benchmark(
         trace_url="http://127.0.0.1:8600/api/trace",
         prompts=["Prompt"],
+        instructions="Use one short sentence.",
         timeout_seconds=5,
         max_new_tokens=24,
         top_k=5,
@@ -194,6 +197,7 @@ def test_benchmark_records_trace_failure() -> None:
     results = benchmark.run_benchmark(
         trace_url="http://127.0.0.1:8600/api/trace",
         prompts=["Prompt"],
+        instructions="Use one short sentence.",
         timeout_seconds=5,
         max_new_tokens=24,
         top_k=5,
@@ -225,6 +229,7 @@ def test_benchmark_interrupt_preserves_completed_results() -> None:
         benchmark.run_benchmark(
             trace_url="http://127.0.0.1:8600/api/trace",
             prompts=["Prompt"],
+            instructions="Use one short sentence.",
             timeout_seconds=5,
             max_new_tokens=24,
             top_k=5,
@@ -284,6 +289,8 @@ def test_write_results_creates_json_and_csv(tmp_path: Path) -> None:
     assert csv_path.exists()
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     assert payload["results"] == rows
+    assert payload["instruction_prompt_source"].endswith("hf_trace_default.txt")
+    assert len(payload["instruction_prompt_sha256"]) == 64
 
     with csv_path.open("r", encoding="utf-8", newline="") as handle:
         csv_rows = list(csv.DictReader(handle))

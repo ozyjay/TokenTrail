@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 import time
@@ -13,6 +14,13 @@ from typing import Any, Callable, Iterable, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SRC_ROOT = PROJECT_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+from token_trail.config import DEFAULT_HF_TRACE_INSTRUCTIONS, DEFAULT_HF_TRACE_INSTRUCTIONS_PATH  # noqa: E402
 
 
 DEFAULT_TRACE_URL = "http://127.0.0.1:8600/api/trace"
@@ -68,16 +76,25 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=(CANDIDATE_SOURCE,),
         help="Candidate source expected from the running HF trace server",
     )
+    parser.add_argument(
+        "--instructions-file",
+        default=None,
+        help="Instruction prompt file to send with benchmark trace requests",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     interrupted = False
+    instructions_file = Path(args.instructions_file) if args.instructions_file else None
+    instructions = load_instructions(instructions_file)
+    instruction_source = str(instructions_file or DEFAULT_HF_TRACE_INSTRUCTIONS_PATH)
     try:
         results = run_benchmark(
             trace_url=args.trace_url,
             prompts=BENCHMARK_PROMPTS,
+            instructions=instructions,
             timeout_seconds=args.timeout_seconds,
             max_new_tokens=args.max_new_tokens,
             top_k=args.top_k,
@@ -89,6 +106,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             trace_url=args.trace_url,
             candidate_source=args.candidate_source,
             prompts=BENCHMARK_PROMPTS,
+            instructions=instructions,
+            instruction_source=instruction_source,
             results=results,
         )
     except BenchmarkInterrupted as error:
@@ -99,6 +118,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             trace_url=args.trace_url,
             candidate_source=args.candidate_source,
             prompts=BENCHMARK_PROMPTS,
+            instructions=instructions,
+            instruction_source=instruction_source,
             results=results,
         )
     except BenchmarkError as error:
@@ -119,6 +140,7 @@ def run_benchmark(
     *,
     trace_url: str,
     prompts: Sequence[str],
+    instructions: str,
     timeout_seconds: float,
     max_new_tokens: int,
     top_k: int,
@@ -178,6 +200,7 @@ def run_benchmark(
                     trace_url=trace_url,
                     model=model,
                     prompt=prompt,
+                    instructions=instructions,
                     timeout_seconds=timeout_seconds,
                     max_new_tokens=max_new_tokens,
                     top_k=top_k,
@@ -264,6 +287,8 @@ def write_results(
     candidate_source: str,
     prompts: Sequence[str],
     results: Sequence[dict[str, Any]],
+    instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS,
+    instruction_source: str = str(DEFAULT_HF_TRACE_INSTRUCTIONS_PATH),
     timestamp: str | None = None,
 ) -> tuple[Path, Path]:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -276,6 +301,9 @@ def write_results(
         "created_at": created_at,
         "trace_url": trace_url,
         "candidate_source": candidate_source,
+        "instruction_prompt_applied": bool(instructions.strip()),
+        "instruction_prompt_source": instruction_source,
+        "instruction_prompt_sha256": hashlib.sha256(instructions.encode("utf-8")).hexdigest(),
         "prompts": list(prompts),
         "results": list(results),
     }
@@ -295,6 +323,7 @@ def _time_trace(
     trace_url: str,
     model: str,
     prompt: str,
+    instructions: str,
     timeout_seconds: float,
     max_new_tokens: int,
     top_k: int,
@@ -305,6 +334,7 @@ def _time_trace(
     payload = {
         "model": model,
         "prompt": prompt,
+        "instructions": instructions,
         "max_new_tokens": max_new_tokens,
         "top_k": top_k,
         "temperature": temperature,
@@ -314,6 +344,15 @@ def _time_trace(
         lambda: request_json(trace_url, method="POST", payload=payload, timeout_seconds=timeout_seconds, opener=opener),
     )
     return elapsed_seconds, result
+
+
+def load_instructions(path: Path | None) -> str:
+    target = path or DEFAULT_HF_TRACE_INSTRUCTIONS_PATH
+    try:
+        text = target.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_HF_TRACE_INSTRUCTIONS
+    return text or DEFAULT_HF_TRACE_INSTRUCTIONS
 
 
 def _time_request(clock: Callable[[], float], operation: Callable[[], dict[str, Any]]) -> tuple[float, dict[str, Any] | str]:

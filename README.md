@@ -32,7 +32,10 @@ TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
+TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE=config/instructions/hf_trace_default.txt
 ```
+
+HF trace generation also receives the fixed instruction prompt in `config/instructions/hf_trace_default.txt`. That hidden prompt keeps public demo responses short, complete, and suitable for visitors; the visible prompt and visible prompt tokens remain the staff-entered prompt.
 
 Run the local probe with the documented candidate source. Probe and server loads use locally cached/installed model files by default; they should not download model weights during the booth flow.
 
@@ -51,7 +54,7 @@ Use `--allow-download` only for an intentional setup/probe download before the d
 - Non-scripted mode means HF trace mode, and it accepts staff-entered prompts.
 - Scripted mode keeps the prompt locked to curated traces; reset and runtime switching restore the curated prompt view.
 - Generated HF traces are trimmed to the first complete sentence after at least eight generated steps.
-- Staff line: This live mode asks a small local model to continue the prompt. The bars show top returned token alternatives, not private reasoning.
+- Staff line: The model also receives a fixed instruction prompt to keep responses short and suitable for the demo. The bars show top returned token alternatives, not private reasoning.
 
 ## Shutdown Notes
 

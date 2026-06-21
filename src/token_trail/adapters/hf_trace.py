@@ -63,6 +63,7 @@ class HfTraceAdapter:
         self,
         *,
         prompt: str,
+        instructions: str | None = None,
         model: str,
         max_new_tokens: int,
         top_k: int,
@@ -78,6 +79,8 @@ class HfTraceAdapter:
             "top_k": top_k,
             "temperature": temperature,
         }
+        if instructions:
+            payload["instructions"] = instructions
         request = Request(
             self.trace_url,
             data=json.dumps(payload).encode("utf-8"),

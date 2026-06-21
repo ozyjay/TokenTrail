@@ -34,6 +34,7 @@ def test_parse_args_uses_fast_probe_defaults() -> None:
     assert args.top_k == 5
     assert args.temperature == 0.3
     assert args.candidate_source == "forward-logits"
+    assert args.instructions_file is None
     assert args.allow_download is False
     assert args.json is False
 
@@ -44,6 +45,15 @@ def test_parse_args_can_explicitly_allow_downloads_for_probe_only() -> None:
     args = probe.parse_args(["--allow-download"])
 
     assert args.allow_download is True
+
+
+def test_load_instructions_uses_file_or_builtin_fallback(tmp_path: Path) -> None:
+    probe = load_probe_module()
+    instructions_file = tmp_path / "instructions.txt"
+    instructions_file.write_text("Use one bright sentence.\n", encoding="utf-8")
+
+    assert probe.load_instructions(instructions_file) == "Use one bright sentence."
+    assert "exactly one complete sentence" in probe.load_instructions(None)
 
 
 class FakeScalar:
@@ -60,6 +70,133 @@ class FakeTokenizer:
 
     def decode(self, token_id: int, skip_special_tokens: bool = True) -> str:
         return self.values[token_id]
+
+
+class FakeEncoded(dict):
+    def to(self, device):
+        self["device"] = device
+        return self
+
+
+class FakeTensor:
+    def __init__(self) -> None:
+        self.device = None
+
+    def to(self, device):
+        self.device = device
+        return self
+
+
+class MappingLikeEncoding:
+    def __init__(self) -> None:
+        self.values = {"input_ids": [[101, 102]], "attention_mask": [[1, 1]]}
+
+    def __getitem__(self, key):
+        return self.values[key]
+
+    def keys(self):
+        return self.values.keys()
+
+    def __iter__(self):
+        return iter(self.values)
+
+
+class ChatTemplateTokenizer(FakeTokenizer):
+    chat_template = "fake template"
+
+    def __init__(self) -> None:
+        super().__init__({10: "Explain", 11: " tokenisation"})
+        self.calls = []
+
+    def apply_chat_template(self, messages, *, add_generation_prompt, return_tensors):
+        self.calls.append((messages, add_generation_prompt, return_tensors))
+        return FakeEncoded({"input_ids": [[101, 102]]})
+
+    def __call__(self, text, return_tensors):
+        self.calls.append(("tokenize", text, return_tensors))
+        return FakeEncoded({"input_ids": [[10, 11]]})
+
+
+class PlainTokenizer(FakeTokenizer):
+    chat_template = None
+
+    def __init__(self) -> None:
+        super().__init__({10: "Explain", 11: " tokenisation"})
+        self.calls = []
+
+    def __call__(self, text, return_tensors):
+        self.calls.append((text, return_tensors))
+        return FakeEncoded({"input_ids": [[10, 11]]})
+
+
+def test_build_generation_inputs_uses_chat_template_with_system_and_user_messages() -> None:
+    probe = load_probe_module()
+    tokenizer = ChatTemplateTokenizer()
+
+    generation_input, prompt_token_ids = probe.build_generation_inputs(
+        tokenizer=tokenizer,
+        prompt="Explain tokenisation",
+        instructions="Hidden system instruction",
+    )
+
+    assert tokenizer.calls[0] == ("tokenize", "Explain tokenisation", "pt")
+    assert tokenizer.calls[1] == (
+        [
+            {"role": "system", "content": "Hidden system instruction"},
+            {"role": "user", "content": "Explain tokenisation"},
+        ],
+        True,
+        "pt",
+    )
+    assert generation_input == {"input_ids": [[101, 102]]}
+    assert prompt_token_ids == [10, 11]
+
+
+def test_build_generation_inputs_preserves_mapping_like_chat_template_output() -> None:
+    probe = load_probe_module()
+
+    class MappingTokenizer(ChatTemplateTokenizer):
+        def apply_chat_template(self, messages, *, add_generation_prompt, return_tensors):
+            return MappingLikeEncoding()
+
+    generation_input, _ = probe.build_generation_inputs(
+        tokenizer=MappingTokenizer(),
+        prompt="Explain tokenisation",
+        instructions="Hidden system instruction",
+    )
+
+    assert generation_input == {"input_ids": [[101, 102]], "attention_mask": [[1, 1]]}
+
+
+def test_move_encoded_to_device_moves_mapping_values() -> None:
+    probe = load_probe_module()
+    input_ids = FakeTensor()
+    attention_mask = FakeTensor()
+
+    moved = probe.move_encoded_to_device({"input_ids": input_ids, "attention_mask": attention_mask}, "mps")
+
+    assert moved == {"input_ids": input_ids, "attention_mask": attention_mask}
+    assert input_ids.device == "mps"
+    assert attention_mask.device == "mps"
+
+
+def test_build_generation_inputs_uses_plain_wrapper_without_chat_template() -> None:
+    probe = load_probe_module()
+    tokenizer = PlainTokenizer()
+
+    generation_input, prompt_token_ids = probe.build_generation_inputs(
+        tokenizer=tokenizer,
+        prompt="Explain tokenisation",
+        instructions="Hidden system instruction",
+    )
+
+    assert tokenizer.calls[0] == ("Explain tokenisation", "pt")
+    wrapped_text, return_tensors = tokenizer.calls[1]
+    assert "Instruction:\nHidden system instruction" in wrapped_text
+    assert "User prompt:\nExplain tokenisation" in wrapped_text
+    assert return_tensors == "pt"
+    assert generation_input == {"input_ids": [[10, 11]]}
+    assert prompt_token_ids == [10, 11]
 
 
 class FakeVector:

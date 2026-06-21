@@ -87,6 +87,7 @@ def make_config() -> RuntimeConfig:
         hf_trace_temperature=0.3,
         hf_trace_timeout_seconds=20,
         hf_trace_warmup_timeout_seconds=180,
+        hf_trace_instructions="Default server instruction.",
     )
 
 
@@ -130,6 +131,7 @@ def test_hf_trace_server_returns_trace_payload() -> None:
     assert runner.calls == [
         {
             "prompt": "Write one sentence.",
+            "instructions": server.load_config().hf_trace_instructions,
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
             "max_new_tokens": 8,
             "top_k": 3,
@@ -487,6 +489,62 @@ def test_hf_trace_server_rejects_bad_requests() -> None:
 
     assert status == 400
     assert "prompt" in body["error"]
+
+
+def test_hf_trace_server_accepts_optional_instructions() -> None:
+    server = load_server_module()
+    runner = FakeTraceRunner()
+    httpd = server.create_server(("127.0.0.1", 0), trace_runner=runner, config=make_config())
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        request = Request(
+            f"http://127.0.0.1:{httpd.server_port}/api/trace",
+            data=json.dumps(
+                {
+                    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+                    "prompt": "Write one sentence.",
+                    "instructions": "Use exactly one short sentence.",
+                }
+            ).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request, timeout=5) as response:
+            assert response.status == 200
+            json.loads(response.read().decode("utf-8"))
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert runner.calls[0]["instructions"] == "Use exactly one short sentence."
+
+
+def test_hf_trace_server_uses_configured_default_instructions_when_omitted() -> None:
+    server = load_server_module()
+    runner = FakeTraceRunner()
+    httpd = server.create_server(("127.0.0.1", 0), trace_runner=runner, config=make_config())
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        request = Request(
+            f"http://127.0.0.1:{httpd.server_port}/api/trace",
+            data=json.dumps({"model": "Qwen/Qwen2.5-0.5B-Instruct", "prompt": "Write one sentence."}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urlopen(request, timeout=5) as response:
+            assert response.status == 200
+            json.loads(response.read().decode("utf-8"))
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert runner.calls[0]["instructions"] == "Default server instruction."
 
 
 def test_transformers_runner_uses_single_flight_lock_for_generation_and_preload() -> None:

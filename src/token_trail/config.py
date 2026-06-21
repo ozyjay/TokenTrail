@@ -21,6 +21,20 @@ DEFAULT_HF_TRACE_MAX_NEW_TOKENS = 96
 DEFAULT_HF_TRACE_TEMPERATURE = 0.3
 DEFAULT_HF_TRACE_TIMEOUT_SECONDS = 20.0
 DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS = 180.0
+DEFAULT_HF_TRACE_INSTRUCTIONS = """You are the local model for a public university Open Day demo called Token Trail.
+
+Respond to the user's prompt with exactly one complete sentence of 12 to 18 words.
+
+Use plain, friendly Australian English suitable for high-school students and families.
+
+Do not use markdown, bullets, numbering, code, emojis, role labels, or quotation marks.
+
+Do not begin with "Sure", "Here", "I think", or "As an AI".
+
+Do not explain the task.
+
+End with a full stop."""
+DEFAULT_HF_TRACE_INSTRUCTIONS_PATH = PROJECT_ROOT / "config" / "instructions" / "hf_trace_default.txt"
 
 
 @dataclass(frozen=True)
@@ -41,6 +55,7 @@ class RuntimeConfig:
     hf_trace_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
     hf_trace_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
     hf_trace_warmup_timeout_seconds: float = DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS
+    hf_trace_instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS
 
     def __post_init__(self) -> None:
         if not self.hf_trace_models:
@@ -71,6 +86,11 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         _model_config_default(model_config, "hf_trace_model"),
     )
     hf_trace_models = _model_config_models(model_config, "hf_trace") or (hf_trace_model,)
+    instructions_file = get_setting(
+        "TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE",
+        str(DEFAULT_HF_TRACE_INSTRUCTIONS_PATH),
+        _model_config_default(model_config, "hf_trace_instructions_file"),
+    )
 
     return RuntimeConfig(
         backend=get_setting("TOKEN_TRAIL_BACKEND", "scripted", _model_config_default(model_config, "backend")).strip().lower(),
@@ -93,6 +113,7 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         hf_trace_warmup_timeout_seconds=float(
             get_setting("TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS))
         ),
+        hf_trace_instructions=_load_instruction_text(_resolve_project_path(instructions_file, env_file)),
     )
 
 
@@ -103,6 +124,10 @@ def _get_raw_setting(name: str, file_values: Mapping[str, str], default: str) ->
 
 
 def _resolve_model_config_path(value: str, env_file: Path | None) -> Path | None:
+    return _resolve_project_path(value, env_file)
+
+
+def _resolve_project_path(value: str, env_file: Path | None) -> Path | None:
     raw_path = value.strip()
     if not raw_path:
         return None
@@ -113,6 +138,16 @@ def _resolve_model_config_path(value: str, env_file: Path | None) -> Path | None
 
     base_dir = env_file.parent if isinstance(env_file, Path) else PROJECT_ROOT
     return base_dir / path
+
+
+def _load_instruction_text(path: Path | None) -> str:
+    if path is None:
+        return DEFAULT_HF_TRACE_INSTRUCTIONS
+    try:
+        text = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_HF_TRACE_INSTRUCTIONS
+    return text or DEFAULT_HF_TRACE_INSTRUCTIONS
 
 
 def _load_model_config(path: Path | None) -> Mapping[str, Any]:

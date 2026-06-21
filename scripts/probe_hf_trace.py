@@ -11,8 +11,9 @@ import json
 import os
 import sys
 import time
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +23,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from token_trail.adapters.base import AdapterError  # noqa: E402
 from token_trail.adapters.hf_trace import validate_trace_payload  # noqa: E402
+from token_trail.config import DEFAULT_HF_TRACE_INSTRUCTIONS, DEFAULT_HF_TRACE_INSTRUCTIONS_PATH  # noqa: E402
 
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
@@ -58,6 +60,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--allow-download",
         action="store_true",
         help="Allow Hugging Face to download missing model files during this probe run",
+    )
+    parser.add_argument(
+        "--instructions-file",
+        default=None,
+        help="Instruction prompt file to apply as a hidden system prompt",
     )
     parser.add_argument("--json", action="store_true", help="Print full trace JSON instead of the compact summary")
     return parser.parse_args(argv)
@@ -272,6 +279,7 @@ def _snapshot_is_causal_lm(snapshot: Path) -> bool:
 def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
     torch, model_class, tokenizer_class = load_hf_libraries()
     started_at = time.perf_counter()
+    instructions = load_instructions(Path(args.instructions_file) if args.instructions_file else None)
 
     tokenizer, model = load_model_and_tokenizer(
         model_name=args.model,
@@ -285,6 +293,7 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
         model=model,
         torch_module=torch,
         prompt=args.prompt,
+        instructions=instructions,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,
     )
@@ -305,6 +314,15 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
         raise ProbeError(f"Generated trace did not match Token Trail contract: {error}") from error
 
     return trace, time.perf_counter() - started_at
+
+
+def load_instructions(path: Path | None) -> str:
+    target = path or DEFAULT_HF_TRACE_INSTRUCTIONS_PATH
+    try:
+        text = target.read_text(encoding="utf-8").strip()
+    except OSError:
+        return DEFAULT_HF_TRACE_INSTRUCTIONS
+    return text or DEFAULT_HF_TRACE_INSTRUCTIONS
 
 
 def load_model_and_tokenizer(
@@ -345,6 +363,7 @@ def generate_with_scores(
     model: Any,
     torch_module: Any,
     prompt: str,
+    instructions: str,
     max_new_tokens: int,
     temperature: float,
 ) -> Any:
@@ -354,10 +373,14 @@ def generate_with_scores(
         raise ProbeError("--temperature must not be negative")
 
     try:
-        encoded = tokenizer(prompt, return_tensors="pt")
+        encoded, prompt_token_ids = build_generation_inputs(
+            tokenizer=tokenizer,
+            prompt=prompt,
+            instructions=instructions,
+        )
         model_device = getattr(model, "device", None)
-        if model_device is not None and hasattr(encoded, "to"):
-            encoded = encoded.to(model_device)
+        if model_device is not None:
+            encoded = move_encoded_to_device(encoded, model_device)
 
         do_sample = temperature > 0
         generation_kwargs = {
@@ -372,9 +395,45 @@ def generate_with_scores(
             generation_kwargs["pad_token_id"] = tokenizer.eos_token_id
 
         with torch_module.no_grad():
-            return model.generate(**encoded, **generation_kwargs)
+            generated = model.generate(**encoded, **generation_kwargs)
+        setattr(generated, "token_trail_prompt_token_ids", prompt_token_ids)
+        setattr(generated, "token_trail_input_token_count", _input_token_count(encoded))
+        return generated
     except Exception as error:
         raise ProbeError(f"Generation failed: {error}") from error
+
+
+def build_generation_inputs(*, tokenizer: Any, prompt: str, instructions: str) -> tuple[Any, list[int]]:
+    prompt_encoded = tokenizer(prompt, return_tensors="pt")
+    prompt_token_ids = _normalise_first_input_ids(prompt_encoded)
+
+    apply_chat_template = getattr(tokenizer, "apply_chat_template", None)
+    if getattr(tokenizer, "chat_template", None) and callable(apply_chat_template):
+        messages = [
+            {"role": "system", "content": instructions},
+            {"role": "user", "content": prompt},
+        ]
+        encoded = apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+        if isinstance(encoded, Mapping) or hasattr(encoded, "keys"):
+            encoded = dict(encoded)
+        else:
+            encoded = {"input_ids": encoded}
+        return encoded, prompt_token_ids
+
+    wrapped_prompt = (
+        f"Instruction:\n{instructions}\n\n"
+        f"User prompt:\n{prompt}\n\n"
+        "Response:"
+    )
+    return tokenizer(wrapped_prompt, return_tensors="pt"), prompt_token_ids
+
+
+def move_encoded_to_device(encoded: Any, device: Any) -> Any:
+    if hasattr(encoded, "to"):
+        return encoded.to(device)
+    if isinstance(encoded, dict):
+        return {key: value.to(device) if hasattr(value, "to") else value for key, value in encoded.items()}
+    return encoded
 
 
 def build_trace_from_generation(
@@ -396,11 +455,11 @@ def build_trace_from_generation(
         raise ProbeError("Generation returned no score tensors")
 
     sequence = generated.sequences[0]
-    prompt_length = len(sequence) - len(generated.scores)
+    prompt_length = int(getattr(generated, "token_trail_input_token_count", 0) or (len(sequence) - len(generated.scores)))
     if prompt_length < 1:
         raise ProbeError("Could not infer prompt token length from generation output")
 
-    prompt_token_ids = normalise_token_id_list(sequence[:prompt_length])
+    prompt_token_ids = list(getattr(generated, "token_trail_prompt_token_ids", []) or normalise_token_id_list(sequence[:prompt_length]))
     selected_token_ids = normalise_token_id_list(sequence[prompt_length:])
     if not selected_token_ids:
         raise ProbeError("Generation returned no selected token ids")
@@ -440,6 +499,7 @@ def build_trace_from_generation(
         candidates_by_step=candidates_by_step,
     )
     trace["candidate_source"] = candidate_source
+    trace["instruction_prompt_applied"] = True
     return trim_trace_to_complete_sentence(trace)
 
 
@@ -492,6 +552,19 @@ def normalise_token_id_list(values: Any) -> list[int]:
     if isinstance(values, int):
         return [values]
     return [int(value) for value in values]
+
+
+def _normalise_first_input_ids(encoded: Any) -> list[int]:
+    input_ids = encoded["input_ids"]
+    if hasattr(input_ids, "tolist"):
+        input_ids = input_ids.tolist()
+    if input_ids and isinstance(input_ids[0], list):
+        input_ids = input_ids[0]
+    return normalise_token_id_list(input_ids)
+
+
+def _input_token_count(encoded: Any) -> int:
+    return len(_normalise_first_input_ids(encoded))
 
 
 def print_summary(*, trace: dict[str, Any], elapsed_seconds: float) -> None:

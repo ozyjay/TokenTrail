@@ -72,6 +72,7 @@ def test_local_test_notes_include_hf_model_benchmark_table() -> None:
     for heading in (
         "Model",
         "Machine",
+        "Instruction prompt",
         "Candidate source",
         "Cold load time",
         "Warm trace time",
@@ -92,6 +93,19 @@ def test_local_test_notes_include_hf_model_benchmark_table() -> None:
 
     assert "HuggingFaceTB/SmolLM2-1.7B-Instruct" not in notes
     assert "Choose the final booth default from measured local performance, not assumptions" in notes
+
+
+def test_docs_describe_hidden_hf_trace_instruction_prompt() -> None:
+    for relative_path in (
+        "README.md",
+        "docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md",
+        "docs/LOCAL_TEST_NOTES.md",
+        "docs/STAFF_READINESS_CHECKLIST.md",
+    ):
+        document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
+
+        assert "fixed instruction prompt" in document
+        assert "The bars show top returned token alternatives, not private reasoning" in document
 
 
 def test_main_docs_do_not_reference_shell_scripts() -> None:
