@@ -362,6 +362,104 @@ def test_model_discovery_handles_cache_errors_without_loading() -> None:
     assert runner.calls == []
 
 
+def test_transformers_runner_discovery_requires_local_metadata(monkeypatch) -> None:
+    server = load_server_module()
+    calls = []
+
+    class FakeProbe:
+        def list_local_models(self):
+            return ["Qwen/Qwen2.5-0.5B-Instruct"]
+
+        def load_model_and_tokenizer(self, **kwargs):
+            raise AssertionError("discovery must not load full model weights")
+
+    class FakeConfig:
+        @classmethod
+        def from_pretrained(cls, model, *, local_files_only):
+            calls.append(("config", model, local_files_only))
+            return object()
+
+    class FakeTokenizer:
+        @classmethod
+        def from_pretrained(cls, model, *, local_files_only):
+            calls.append(("tokenizer", model, local_files_only))
+            return object()
+
+    monkeypatch.setattr(server, "_load_hf_metadata_libraries", lambda: (FakeConfig, FakeTokenizer))
+    runner = server.TransformersTraceRunner()
+    runner._probe = FakeProbe()
+
+    payload = runner.discover_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+    assert payload == {
+        "cached": True,
+        "metadata_loadable": True,
+        "available": True,
+        "reason": "Available locally; not loaded",
+    }
+    assert calls == [
+        ("config", "Qwen/Qwen2.5-0.5B-Instruct", True),
+        ("tokenizer", "Qwen/Qwen2.5-0.5B-Instruct", True),
+    ]
+
+
+def test_transformers_runner_discovery_rejects_cached_model_when_metadata_is_not_loadable(monkeypatch) -> None:
+    server = load_server_module()
+
+    class FakeProbe:
+        def list_local_models(self):
+            return ["Qwen/Qwen2.5-0.5B-Instruct"]
+
+        def load_model_and_tokenizer(self, **kwargs):
+            raise AssertionError("discovery must not load full model weights")
+
+    class FailingConfig:
+        @classmethod
+        def from_pretrained(cls, model, *, local_files_only):
+            assert local_files_only is True
+            raise RuntimeError("local config missing")
+
+    class FakeTokenizer:
+        @classmethod
+        def from_pretrained(cls, model, *, local_files_only):
+            raise AssertionError("tokenizer check should not run after config failure")
+
+    monkeypatch.setattr(server, "_load_hf_metadata_libraries", lambda: (FailingConfig, FakeTokenizer))
+    runner = server.TransformersTraceRunner()
+    runner._probe = FakeProbe()
+
+    payload = runner.discover_model("Qwen/Qwen2.5-0.5B-Instruct")
+
+    assert payload["cached"] is True
+    assert payload["metadata_loadable"] is False
+    assert payload["available"] is False
+    assert "local config missing" in payload["reason"]
+
+
+def test_transformers_runner_discovery_skips_metadata_for_loaded_model(monkeypatch) -> None:
+    server = load_server_module()
+
+    class FakeProbe:
+        def list_local_models(self):
+            raise AssertionError("loaded model should skip cache scan")
+
+    monkeypatch.setattr(
+        server,
+        "_load_hf_metadata_libraries",
+        lambda: (_ for _ in ()).throw(AssertionError("loaded model should skip metadata check")),
+    )
+    runner = server.TransformersTraceRunner()
+    runner._probe = FakeProbe()
+    runner._models["Qwen/Qwen2.5-0.5B-Instruct"] = (object(), object())
+
+    assert runner.discover_model("Qwen/Qwen2.5-0.5B-Instruct") == {
+        "cached": True,
+        "metadata_loadable": True,
+        "available": True,
+        "reason": "Loaded",
+    }
+
+
 def test_hf_trace_server_rejects_bad_requests() -> None:
     server = load_server_module()
     httpd = server.create_server(("127.0.0.1", 0), trace_runner=FakeTraceRunner())

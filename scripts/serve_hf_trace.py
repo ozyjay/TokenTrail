@@ -64,6 +64,8 @@ class TransformersTraceRunner:
         self._torch = None
         self._model_class = None
         self._tokenizer_class = None
+        self._config_class = None
+        self._metadata_tokenizer_class = None
         self._models: dict[str, tuple[Any, Any]] = {}
         self._generation_lock = threading.Lock()
 
@@ -143,10 +145,22 @@ class TransformersTraceRunner:
                 "reason": str(error),
             }
 
+        metadata_loadable = False
+        metadata_error = ""
         if cached:
+            metadata_loadable, metadata_error = self._metadata_loadable(model)
+
+        if cached:
+            if not metadata_loadable:
+                return {
+                    "cached": True,
+                    "metadata_loadable": False,
+                    "available": False,
+                    "reason": metadata_error or "Local metadata is not loadable",
+                }
             return {
                 "cached": True,
-                "metadata_loadable": True,
+                "metadata_loadable": metadata_loadable,
                 "available": True,
                 "reason": "Available locally; not loaded",
             }
@@ -156,6 +170,17 @@ class TransformersTraceRunner:
             "available": False,
             "reason": "Not found locally",
         }
+
+    def _metadata_loadable(self, model: str) -> tuple[bool, str]:
+        if self._config_class is None or self._metadata_tokenizer_class is None:
+            self._config_class, self._metadata_tokenizer_class = _load_hf_metadata_libraries()
+
+        try:
+            self._config_class.from_pretrained(model, local_files_only=True)
+            self._metadata_tokenizer_class.from_pretrained(model, local_files_only=True)
+        except Exception as error:
+            return False, str(error)
+        return True, ""
 
 
 @dataclass
@@ -356,6 +381,14 @@ def _load_probe_module() -> Any:
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _load_hf_metadata_libraries() -> tuple[Any, Any]:
+    try:
+        from transformers import AutoConfig, AutoTokenizer
+    except Exception as error:
+        raise HfTraceServerError(f"Could not load HF metadata libraries: {error}") from error
+    return AutoConfig, AutoTokenizer
 
 
 def _required_string(payload: Any, key: str) -> str:

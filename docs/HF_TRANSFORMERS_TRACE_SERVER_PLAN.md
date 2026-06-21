@@ -35,7 +35,7 @@ Use forward logits for normal validation:
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
 
-HF trace server discovery and runtime loads are local-only. Discovery uses local cache metadata and must not download models or load full model weights. If a selected model is not already installed in the local Transformers/Hugging Face cache or provided as a local path, warm-up or generation should fail cleanly and Token Trail should use scripted prepared traces instead of downloading during the demo.
+HF trace server discovery and runtime loads are local-only. Discovery checks configured models for a complete local snapshot, then verifies metadata with `AutoConfig.from_pretrained(..., local_files_only=True)` and `AutoTokenizer.from_pretrained(..., local_files_only=True)`. Discovery must not download models or load full model weights. If a selected model is not already installed in the local Transformers/Hugging Face cache or provided as a local path, warm-up or generation should fail cleanly and Token Trail should use scripted prepared traces instead of downloading during the demo.
 
 Use generation-scores only for comparison or debugging:
 
