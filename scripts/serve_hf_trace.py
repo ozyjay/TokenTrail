@@ -112,12 +112,16 @@ class TransformersTraceRunner:
                 model_class=self._model_class,
                 tokenizer_class=self._tokenizer_class,
                 torch_module=self._torch,
+                local_files_only=True,
             )
 
         return self._models[model_name]
 
     def is_model_loaded(self, model: str) -> bool:
         return model in self._models
+
+    def list_local_models(self) -> list[str]:
+        return self._probe.list_local_models()
 
 
 @dataclass
@@ -144,6 +148,10 @@ class HfTraceRequestHandler(BaseHTTPRequestHandler):
                 payload["model"] = model
                 payload["model_loaded"] = bool(is_loaded(model))
             self._send_json(payload)
+            return
+        if parsed.path == "/api/models":
+            list_local_models = getattr(self.server.state.trace_runner, "list_local_models", lambda: [])
+            self._send_json({"models": list_local_models()})
             return
         self._send_json({"error": "Not found"}, status=404)
 

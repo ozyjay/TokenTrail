@@ -75,7 +75,7 @@ function runtimeStatusLabel(option) {
     case "ready":
       return "ready";
     case "running":
-      return "loads on first use";
+      return "local files required";
     case "unavailable":
       return "unavailable";
     default:

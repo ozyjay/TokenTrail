@@ -18,11 +18,12 @@ Token Trail validates the payload before replay. Normal operation is to start th
 ## Configuration
 
 ```text
-TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS=96
+TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
 ```
+
+The HF trace server exposes locally installed models through `GET /api/models`. Token Trail uses that runtime list for selectable HF trace options instead of trusting a static model list.
 
 ## Probe Commands
 
@@ -31,6 +32,8 @@ Use forward logits for normal validation:
 ```powershell
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
+
+HF trace server runtime loads are local-only. If a selected model is not already installed in the local Transformers/Hugging Face cache or provided as a local path, warm-up or generation should fail cleanly and Token Trail should use scripted prepared traces instead of downloading during the demo.
 
 Use generation-scores only for comparison or debugging:
 
@@ -46,4 +49,4 @@ Keep that suppression narrow to the known shutdown warning. Request failures, tr
 
 ## Startup Behaviour
 
-The local runner waits for the HF trace server `/health` endpoint, then calls `POST /api/warmup` for the configured default model before starting the Token Trail web app. Warm-up loads the tokenizer and model into the server cache without generating a visible trace. If warm-up fails, startup fails visibly so the operator can use scripted prepared traces.
+The local runner waits for the HF trace server `/health` endpoint, calls `GET /api/models`, then calls `POST /api/warmup` for the selected discovered model before starting the Token Trail web app. Warm-up loads the tokenizer and model into the server cache without generating a visible trace. It uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout. If no local models are discovered or warm-up fails, startup stays visible so the operator can use scripted prepared traces.

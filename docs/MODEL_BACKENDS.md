@@ -29,7 +29,7 @@ The server keeps only generated steps through the first complete sentence after 
 ## Configuration
 
 ```text
-TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
 ```
+
+Runtime-selectable HF trace models are discovered from the local Hugging Face cache through the HF trace server. `TOKEN_TRAIL_HF_TRACE_MODEL` is a preferred initial model only when it is already installed locally.

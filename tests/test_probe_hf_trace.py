@@ -34,7 +34,16 @@ def test_parse_args_uses_fast_probe_defaults() -> None:
     assert args.top_k == 5
     assert args.temperature == 0.3
     assert args.candidate_source == "forward-logits"
+    assert args.allow_download is False
     assert args.json is False
+
+
+def test_parse_args_can_explicitly_allow_downloads_for_probe_only() -> None:
+    probe = load_probe_module()
+
+    args = probe.parse_args(["--allow-download"])
+
+    assert args.allow_download is True
 
 
 class FakeScalar:
@@ -212,6 +221,112 @@ def test_load_hf_libraries_reports_missing_dependency(monkeypatch) -> None:
         assert "--with hf-trace" not in str(error)
     else:
         raise AssertionError("expected ProbeError")
+
+
+def test_load_model_and_tokenizer_uses_local_files_only_by_default() -> None:
+    probe = load_probe_module()
+    calls = []
+
+    class FakeTokenizerClass:
+        @staticmethod
+        def from_pretrained(model_name, **kwargs):
+            calls.append(("tokenizer", model_name, kwargs))
+            return type("FakeLoadedTokenizer", (), {"pad_token_id": 0, "eos_token_id": 0})()
+
+    class FakeModel:
+        def eval(self):
+            calls.append(("eval",))
+
+    class FakeModelClass:
+        @staticmethod
+        def from_pretrained(model_name, **kwargs):
+            calls.append(("model", model_name, kwargs))
+            return FakeModel()
+
+    probe.load_model_and_tokenizer(
+        model_name="Qwen/Qwen2.5-3B-Instruct",
+        model_class=FakeModelClass,
+        tokenizer_class=FakeTokenizerClass,
+        torch_module=object(),
+    )
+
+    assert calls == [
+        ("tokenizer", "Qwen/Qwen2.5-3B-Instruct", {"local_files_only": True}),
+        (
+            "model",
+            "Qwen/Qwen2.5-3B-Instruct",
+            {"torch_dtype": "auto", "device_map": "auto", "local_files_only": True},
+        ),
+        ("eval",),
+    ]
+
+
+def test_load_model_and_tokenizer_allows_download_only_when_requested() -> None:
+    probe = load_probe_module()
+    calls = []
+
+    class FakeTokenizerClass:
+        @staticmethod
+        def from_pretrained(model_name, **kwargs):
+            calls.append(("tokenizer", kwargs))
+            return type("FakeLoadedTokenizer", (), {"pad_token_id": 0, "eos_token_id": 0})()
+
+    class FakeModel:
+        def eval(self):
+            pass
+
+    class FakeModelClass:
+        @staticmethod
+        def from_pretrained(model_name, **kwargs):
+            calls.append(("model", kwargs))
+            return FakeModel()
+
+    probe.load_model_and_tokenizer(
+        model_name="Qwen/Qwen2.5-3B-Instruct",
+        model_class=FakeModelClass,
+        tokenizer_class=FakeTokenizerClass,
+        torch_module=object(),
+        local_files_only=False,
+    )
+
+    assert calls == [
+        ("tokenizer", {"local_files_only": False}),
+        ("model", {"torch_dtype": "auto", "device_map": "auto", "local_files_only": False}),
+    ]
+
+
+def test_list_local_models_discovers_complete_hf_cache_snapshots(tmp_path) -> None:
+    probe = load_probe_module()
+    complete = tmp_path / "models--Qwen--Qwen2.5-3B-Instruct" / "snapshots" / "abc"
+    complete.mkdir(parents=True)
+    (complete / "config.json").write_text('{"architectures": ["Qwen2ForCausalLM"]}', encoding="utf-8")
+    (complete / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (complete / "model-00001-of-00002.safetensors").write_text("weights", encoding="utf-8")
+
+    incomplete = tmp_path / "models--Qwen--Qwen2.5-0.5B-Instruct" / "snapshots" / "def"
+    incomplete.mkdir(parents=True)
+    (incomplete / "config.json").write_text("{}", encoding="utf-8")
+    (incomplete / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (incomplete / "model.safetensors.index.json").write_text("{}", encoding="utf-8")
+
+    assert probe.list_local_models(cache_dir=tmp_path) == ["Qwen/Qwen2.5-3B-Instruct"]
+
+
+def test_list_local_models_excludes_mlx_and_non_causal_models(tmp_path) -> None:
+    probe = load_probe_module()
+    mlx = tmp_path / "models--mlx-community--Qwen2.5-3B-Instruct-4bit" / "snapshots" / "abc"
+    mlx.mkdir(parents=True)
+    (mlx / "config.json").write_text('{"architectures": ["Qwen2ForCausalLM"]}', encoding="utf-8")
+    (mlx / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (mlx / "model.safetensors").write_text("weights", encoding="utf-8")
+
+    embedding = tmp_path / "models--Qwen--Qwen3-Embedding-0.6B" / "snapshots" / "def"
+    embedding.mkdir(parents=True)
+    (embedding / "config.json").write_text('{"architectures": ["Qwen3ForSequenceClassification"]}', encoding="utf-8")
+    (embedding / "tokenizer.json").write_text("{}", encoding="utf-8")
+    (embedding / "model.safetensors").write_text("weights", encoding="utf-8")
+
+    assert probe.list_local_models(cache_dir=tmp_path) == []
 
 
 def test_generated_text_from_trace_joins_selected_tokens() -> None:

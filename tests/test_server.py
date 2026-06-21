@@ -31,8 +31,15 @@ def make_config(
 
 
 class FakeHfTraceAdapter:
-    def __init__(self, available: bool = True, trace: dict | None = None, error: bool = False) -> None:
+    def __init__(
+        self,
+        available: bool = True,
+        trace: dict | None = None,
+        error: bool = False,
+        models: list[str] | None = None,
+    ) -> None:
         self.available = available
+        self.models = models or ["Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"]
         self.trace = trace or {
             "mode": "hf-live-trace",
             "model": "Qwen/Qwen2.5-1.5B-Instruct",
@@ -56,6 +63,9 @@ class FakeHfTraceAdapter:
         import token_trail.adapters.hf_trace as hf_trace
 
         return hf_trace.HfTraceStatus(available=self.available)
+
+    def available_models(self, *, timeout_seconds: float) -> list[str]:
+        return self.models
 
     def generate_trace(self, **kwargs) -> dict:
         self.generate_calls.append(kwargs)

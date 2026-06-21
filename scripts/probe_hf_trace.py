@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,8 @@ TRACE_EXPLANATION = "Top returned alternatives from the local model for this tok
 CANDIDATE_SOURCE_FORWARD_LOGITS = "forward-logits"
 CANDIDATE_SOURCE_GENERATION_SCORES = "generation-scores"
 MIN_COMPLETE_SENTENCE_STEPS = 8
+MODEL_WEIGHT_PATTERNS = ("*.safetensors", "pytorch_model*.bin", "model*.bin")
+TOKENIZER_FILENAMES = ("tokenizer.json", "tokenizer.model", "vocab.json")
 
 
 class ProbeError(Exception):
@@ -50,6 +53,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=CANDIDATE_SOURCE_FORWARD_LOGITS,
         choices=(CANDIDATE_SOURCE_FORWARD_LOGITS, CANDIDATE_SOURCE_GENERATION_SCORES),
         help="Score source for displayed candidate alternatives",
+    )
+    parser.add_argument(
+        "--allow-download",
+        action="store_true",
+        help="Allow Hugging Face to download missing model files during this probe run",
     )
     parser.add_argument("--json", action="store_true", help="Print full trace JSON instead of the compact summary")
     return parser.parse_args(argv)
@@ -186,6 +194,81 @@ def load_hf_libraries() -> tuple[Any, Any, Any]:
     return torch, AutoModelForCausalLM, AutoTokenizer
 
 
+def default_hf_cache_dir(env: Mapping[str, str] | None = None) -> Path:
+    values = env or os.environ
+    if values.get("HF_HUB_CACHE"):
+        return Path(values["HF_HUB_CACHE"]).expanduser()
+    if values.get("HF_HOME"):
+        return Path(values["HF_HOME"]).expanduser() / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
+
+
+def list_local_models(cache_dir: Path | None = None) -> list[str]:
+    root = cache_dir or default_hf_cache_dir()
+    if not root.exists():
+        return []
+
+    models = []
+    for model_dir in root.glob("models--*"):
+        if not model_dir.is_dir():
+            continue
+        model_name = _model_name_from_cache_dir(model_dir.name)
+        if not _repo_is_supported_for_token_trail(model_name):
+            continue
+        if model_name and _has_complete_snapshot(model_dir):
+            models.append(model_name)
+    return sorted(models)
+
+
+def _model_name_from_cache_dir(dirname: str) -> str:
+    if not dirname.startswith("models--"):
+        return ""
+    return dirname.removeprefix("models--").replace("--", "/")
+
+
+def _has_complete_snapshot(model_dir: Path) -> bool:
+    snapshots_dir = model_dir / "snapshots"
+    if not snapshots_dir.exists():
+        return False
+
+    for snapshot in snapshots_dir.iterdir():
+        if not snapshot.is_dir():
+            continue
+        if not (snapshot / "config.json").exists():
+            continue
+        if not _snapshot_is_causal_lm(snapshot):
+            continue
+        if not any((snapshot / filename).exists() for filename in TOKENIZER_FILENAMES):
+            continue
+        if any(path.name != "model.safetensors.index.json" for pattern in MODEL_WEIGHT_PATTERNS for path in snapshot.glob(pattern)):
+            return True
+    return False
+
+
+def _repo_is_supported_for_token_trail(model_name: str) -> bool:
+    if not model_name:
+        return False
+    lowered = model_name.lower()
+    if lowered.startswith("mlx-community/"):
+        return False
+    excluded_terms = ("embedding", "whisper", "parakeet", "modernbert")
+    return not any(term in lowered for term in excluded_terms)
+
+
+def _snapshot_is_causal_lm(snapshot: Path) -> bool:
+    try:
+        config = json.loads((snapshot / "config.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    architectures = config.get("architectures")
+    if isinstance(architectures, list) and any(
+        isinstance(architecture, str) and architecture.endswith("ForCausalLM") for architecture in architectures
+    ):
+        return True
+    return False
+
+
 def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
     torch, model_class, tokenizer_class = load_hf_libraries()
     started_at = time.perf_counter()
@@ -195,6 +278,7 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
         model_class=model_class,
         tokenizer_class=tokenizer_class,
         torch_module=torch,
+        local_files_only=not args.allow_download,
     )
     generated = generate_with_scores(
         tokenizer=tokenizer,
@@ -223,11 +307,29 @@ def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], float]:
     return trace, time.perf_counter() - started_at
 
 
-def load_model_and_tokenizer(*, model_name: str, model_class: Any, tokenizer_class: Any, torch_module: Any) -> tuple[Any, Any]:
+def load_model_and_tokenizer(
+    *,
+    model_name: str,
+    model_class: Any,
+    tokenizer_class: Any,
+    torch_module: Any,
+    local_files_only: bool = True,
+) -> tuple[Any, Any]:
     try:
-        tokenizer = tokenizer_class.from_pretrained(model_name)
-        model = model_class.from_pretrained(model_name, torch_dtype="auto", device_map="auto")
+        tokenizer = tokenizer_class.from_pretrained(model_name, local_files_only=local_files_only)
+        model = model_class.from_pretrained(
+            model_name,
+            torch_dtype="auto",
+            device_map="auto",
+            local_files_only=local_files_only,
+        )
     except Exception as error:
+        if local_files_only:
+            raise ProbeError(
+                f"Failed to load local model or tokenizer for {model_name!r}. "
+                "Install/download the model first, choose an already cached model, or rerun the probe with "
+                f"--allow-download. Details: {error}"
+            ) from error
         raise ProbeError(f"Failed to load model or tokenizer for {model_name!r}: {error}") from error
 
     if getattr(tokenizer, "pad_token_id", None) is None and getattr(tokenizer, "eos_token_id", None) is not None:

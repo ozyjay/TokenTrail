@@ -122,7 +122,7 @@ def test_hf_trace_plan_records_cli_probe_result() -> None:
     assert "generation-scores" in plan
 
 
-def test_hf_trace_model_list_is_documented() -> None:
+def test_hf_trace_runtime_model_discovery_is_documented() -> None:
     for relative_path in (
         ".env.example",
         "README.md",
@@ -131,16 +131,7 @@ def test_hf_trace_model_list_is_documented() -> None:
         document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
 
         assert "TOKEN_TRAIL_HF_TRACE_MODEL=" in document
-        assert "TOKEN_TRAIL_HF_TRACE_MODELS=" in document
-
-
-def test_model_config_json_is_documented() -> None:
-    for relative_path in (
-        ".env.example",
-        "README.md",
-        "docs/HF_TRANSFORMERS_TRACE_SERVER_PLAN.md",
-    ):
-        document = (PROJECT_ROOT / relative_path).read_text(encoding="utf-8")
-
-        assert "TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json" in document
-        assert "config/models.json" in document
+        assert "locally" in document.lower()
+        assert "discovered" in document.lower() or "discover" in document.lower()
+        assert "TOKEN_TRAIL_HF_TRACE_MODELS=" not in document
+        assert "TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json" not in document

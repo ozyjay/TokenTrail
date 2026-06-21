@@ -26,6 +26,7 @@ def clear_token_trail_env(monkeypatch) -> None:
         "TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS",
         "TOKEN_TRAIL_HF_TRACE_TEMPERATURE",
         "TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS",
         "TOKEN_TRAIL_MODEL_CONFIG_PATH",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -48,6 +49,7 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.hf_trace_max_new_tokens == 96
     assert config.hf_trace_temperature == 0.3
     assert config.hf_trace_timeout_seconds == 20.0
+    assert config.hf_trace_warmup_timeout_seconds == 180.0
 
 
 def test_config_reads_environment_overrides(monkeypatch) -> None:
@@ -66,6 +68,7 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_MAX_NEW_TOKENS", "48")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", "0.1")
     monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS", "6.5")
+    monkeypatch.setenv("TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS", "90")
 
     config = load_config(env_file=None)
 
@@ -80,6 +83,7 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.hf_trace_max_new_tokens == 48
     assert config.hf_trace_temperature == 0.1
     assert config.hf_trace_timeout_seconds == 6.5
+    assert config.hf_trace_warmup_timeout_seconds == 90.0
 
 
 def test_config_reads_env_file(monkeypatch) -> None:

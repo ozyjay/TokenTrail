@@ -109,6 +109,19 @@ def test_warmup_url_uses_trace_server_origin() -> None:
     assert _warmup_url_for_trace_url("http://127.0.0.1:8600/api/trace") == "http://127.0.0.1:8600/api/warmup"
 
 
+def test_available_models_uses_models_endpoint() -> None:
+    calls = []
+
+    def opener(request, timeout):
+        calls.append((request.full_url, request.get_method(), timeout))
+        return FakeResponse(status=200, body={"models": ["Qwen/Qwen2.5-3B-Instruct"]})
+
+    models = HfTraceAdapter("http://127.0.0.1:8600/api/trace", opener=opener).available_models(timeout_seconds=3)
+
+    assert models == ["Qwen/Qwen2.5-3B-Instruct"]
+    assert calls == [("http://127.0.0.1:8600/api/models", "GET", 3.0)]
+
+
 def test_generate_trace_still_reports_incomplete_generation_as_error() -> None:
     def opener(request, timeout):
         raise http_error(400, {"error": "Generated trace did not reach a complete sentence"})

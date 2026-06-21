@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -20,6 +20,7 @@ DEFAULT_HF_TRACE_TOP_K = 5
 DEFAULT_HF_TRACE_MAX_NEW_TOKENS = 96
 DEFAULT_HF_TRACE_TEMPERATURE = 0.3
 DEFAULT_HF_TRACE_TIMEOUT_SECONDS = 20.0
+DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS = 180.0
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class RuntimeConfig:
     hf_trace_max_new_tokens: int = DEFAULT_HF_TRACE_MAX_NEW_TOKENS
     hf_trace_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
     hf_trace_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
+    hf_trace_warmup_timeout_seconds: float = DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         if not self.hf_trace_models:
@@ -87,6 +89,9 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         hf_trace_temperature=float(get_setting("TOKEN_TRAIL_HF_TRACE_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))),
         hf_trace_timeout_seconds=float(
             get_setting("TOKEN_TRAIL_HF_TRACE_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_TIMEOUT_SECONDS))
+        ),
+        hf_trace_warmup_timeout_seconds=float(
+            get_setting("TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_WARMUP_TIMEOUT_SECONDS))
         ),
     )
 
@@ -172,6 +177,17 @@ def _parse_bool_setting(value: str) -> bool:
     """Parse a permissive boolean environment setting."""
 
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def with_hf_trace_models(config: RuntimeConfig, models: list[str] | tuple[str, ...]) -> RuntimeConfig:
+    """Return config adjusted to the locally discovered HF trace models."""
+
+    discovered = tuple(dict.fromkeys(model.strip() for model in models if model.strip()))
+    if not discovered:
+        return replace(config, hf_trace_enabled=False, hf_trace_models=())
+
+    selected = config.hf_trace_model if config.hf_trace_model in discovered else discovered[0]
+    return replace(config, hf_trace_model=selected, hf_trace_models=discovered)
 
 
 def _load_env_file(env_file: Path | None) -> Mapping[str, str]:

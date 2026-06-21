@@ -71,7 +71,7 @@ def build_runtime_options(
                 notes = "HF trace server is running and this model is ready."
             else:
                 status = "running"
-                notes = "HF trace server is running; this model loads on first use."
+                notes = "HF trace server is running; local model files must already be installed."
             options.append(
                 RuntimeOption(
                     id=f"hf-trace:{model}",

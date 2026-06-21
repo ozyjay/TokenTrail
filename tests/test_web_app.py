@@ -86,7 +86,7 @@ def test_runtime_selector_labels_hf_warm_status() -> None:
     assert 'case "ready":' in app_js
     assert 'return "ready";' in app_js
     assert 'case "running":' in app_js
-    assert 'return "loads on first use";' in app_js
+    assert 'return "local files required";' in app_js
     assert 'case "unavailable":' in app_js
     assert 'return "unavailable";' in app_js
 

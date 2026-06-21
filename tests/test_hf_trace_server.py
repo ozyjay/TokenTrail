@@ -51,6 +51,9 @@ class FakeTraceRunner:
         self.preload_calls.append(model)
         self.loaded_models.add(model)
 
+    def list_local_models(self) -> list[str]:
+        return ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]
+
 
 def post_json(url: str, payload: dict) -> dict:
     request = Request(
@@ -268,6 +271,23 @@ def test_hf_trace_health_reports_model_warm_status() -> None:
     assert cold_payload["model_loaded"] is False
 
 
+def test_hf_trace_server_lists_local_models() -> None:
+    server = load_server_module()
+    httpd = server.create_server(("127.0.0.1", 0), trace_runner=FakeTraceRunner())
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+
+    try:
+        with urlopen(f"http://127.0.0.1:{httpd.server_port}/api/models", timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+    assert payload == {"models": ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]}
+
+
 def test_hf_trace_server_rejects_bad_requests() -> None:
     server = load_server_module()
     httpd = server.create_server(("127.0.0.1", 0), trace_runner=FakeTraceRunner())
@@ -309,6 +329,7 @@ def test_transformers_runner_uses_single_flight_lock_for_generation_and_preload(
 
         def load_model_and_tokenizer(self, **kwargs):
             self.events.append(("load-start", kwargs["model_name"], time.monotonic()))
+            assert kwargs["local_files_only"] is True
             time.sleep(0.05)
             self.events.append(("load-end", kwargs["model_name"], time.monotonic()))
             return object(), object()

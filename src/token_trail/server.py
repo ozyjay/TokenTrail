@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 from token_trail.adapters.base import AdapterError
 from token_trail.adapters.hf_trace import HfTraceAdapter, HfTraceStatus, validate_trace_payload
-from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config
+from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config, with_hf_trace_models
 from token_trail.runtime import RuntimeOption, RuntimeState, build_runtime_options, default_runtime_id, select_runtime
 from token_trail.traces import get_trace, list_traces
 
@@ -47,6 +47,7 @@ def build_server_state(
     """Build runtime state at startup without doing work at import time."""
 
     trace_adapter = hf_trace_adapter or HfTraceAdapter(config.hf_trace_url)
+    config = _config_with_runtime_hf_models(config, trace_adapter)
     hf_trace_statuses = _hf_trace_statuses(config, trace_adapter)
     hf_trace_status = hf_trace_statuses.get(config.hf_trace_model, HfTraceStatus(available=False))
     runtime_options = build_runtime_options(config, hf_trace_statuses=_runtime_status_payload(hf_trace_statuses))
@@ -228,6 +229,15 @@ def _scripted_fallback_payload(runtime_id: str, trace, *, reason: str | None = N
         "message": message,
         "trace": trace.to_dict(),
     }
+
+
+def _config_with_runtime_hf_models(config: RuntimeConfig, adapter: HfTraceAdapter) -> RuntimeConfig:
+    if not config.hf_trace_enabled:
+        return config
+    try:
+        return with_hf_trace_models(config, adapter.available_models(timeout_seconds=2.0))
+    except AdapterError:
+        return config
 
 
 def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[str, HfTraceStatus]:

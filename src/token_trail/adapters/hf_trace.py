@@ -133,6 +133,30 @@ class HfTraceAdapter:
             raise AdapterError("HF trace warm-up returned an unexpected response")
         return result
 
+    def available_models(self, *, timeout_seconds: float) -> list[str]:
+        """Return locally available HF trace models reported by the trace server."""
+
+        request = Request(_models_url_for_trace_url(self.trace_url), method="GET")
+        try:
+            with self._opener(request, timeout=float(timeout_seconds)) as response:
+                raw_body = response.read()
+        except TimeoutError as error:
+            raise AdapterError("HF trace model discovery timed out") from error
+        except HTTPError as error:
+            raise AdapterError(f"HF trace model discovery failed: {_http_error_message(error)}") from error
+        except (URLError, OSError) as error:
+            raise AdapterError(f"HF trace model discovery failed: {error}") from error
+
+        try:
+            payload = json.loads(raw_body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise AdapterError("HF trace model discovery returned invalid JSON") from error
+
+        models = payload.get("models") if isinstance(payload, dict) else None
+        if not isinstance(models, list) or not all(isinstance(model, str) and model.strip() for model in models):
+            raise AdapterError("HF trace model discovery returned an unexpected response")
+        return list(dict.fromkeys(model.strip() for model in models))
+
 
 def validate_trace_payload(trace: Any) -> None:
     if not isinstance(trace, dict):
@@ -204,3 +228,8 @@ def _health_url_for_trace_url(trace_url: str, *, model: str | None = None) -> st
 def _warmup_url_for_trace_url(trace_url: str) -> str:
     parsed = urlparse(trace_url)
     return urlunparse((parsed.scheme or "http", parsed.netloc, "/api/warmup", "", "", ""))
+
+
+def _models_url_for_trace_url(trace_url: str) -> str:
+    parsed = urlparse(trace_url)
+    return urlunparse((parsed.scheme or "http", parsed.netloc, "/api/models", "", "", ""))

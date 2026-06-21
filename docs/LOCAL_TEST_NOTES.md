@@ -33,7 +33,7 @@ Stopping the combined local stack prints the Token Trail and HF trace server sto
 
 ## 2026-06-20 — HF Trace Startup
 
-`scripts/run.ps1` starts the HF trace server, waits for `/health`, calls `POST /api/warmup` for the configured model, and then starts the Token Trail web app. Warm-up failure should be visible to the operator before visitors use the booth.
+`scripts/run.ps1` starts the HF trace server, waits for `/health`, calls `GET /api/models` to discover locally installed models, calls `POST /api/warmup` for the selected discovered model, and then starts the Token Trail web app. Warm-up uses `TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS`, separate from the shorter live generation timeout. Warm-up failure should be visible to the operator before visitors use the booth.
 
 Normal operation is:
 

@@ -25,19 +25,20 @@ HF trace dependencies are installed by the normal Poetry setup.
 
 ## HF Trace
 
-Configure selectable HF trace models in `config/models.json`:
+HF trace runtime options are discovered from locally cached/installed Hugging Face models at startup. Use `TOKEN_TRAIL_HF_TRACE_MODEL` only as a preferred initial model when that model is already installed locally:
 
 ```text
-TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
 TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
+TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
 ```
 
-Run the local probe with the documented candidate source:
+Run the local probe with the documented candidate source. Probe and server loads use locally cached/installed model files by default; they should not download model weights during the booth flow.
 
 ```powershell
 pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
 ```
+
+Use `--allow-download` only for an intentional setup/probe download before the demo.
 
 `scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits for `/health`, calls `POST /api/warmup` for the configured model, then starts the Token Trail app. If warm-up fails, setup fails visibly so staff can switch to scripted prepared traces.
 

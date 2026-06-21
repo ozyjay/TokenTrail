@@ -1,9 +1,11 @@
+from token_trail.adapters.base import AdapterError
 from token_trail.config import RuntimeConfig
 from token_trail.local_runner import (
     ensure_hf_trace_server,
     hf_trace_health_url,
     hf_trace_server_address,
     preload_hf_trace_model,
+    resolve_hf_trace_models,
     should_manage_hf_trace,
 )
 
@@ -27,6 +29,7 @@ def make_config(
         hf_trace_max_new_tokens=96,
         hf_trace_temperature=0.3,
         hf_trace_timeout_seconds=20,
+        hf_trace_warmup_timeout_seconds=180,
     )
 
 
@@ -47,7 +50,7 @@ def test_hf_trace_health_url_uses_trace_server_origin() -> None:
     )
 
 
-def test_ensure_hf_trace_server_preloads_model_when_already_healthy(monkeypatch) -> None:
+def test_ensure_hf_trace_server_does_not_preload_before_model_discovery_when_already_healthy(monkeypatch) -> None:
     warmups = []
     monkeypatch.setattr("token_trail.local_runner.is_hf_trace_server_healthy", lambda config: True)
     monkeypatch.setattr("token_trail.local_runner.preload_hf_trace_model", lambda config: warmups.append(config))
@@ -55,10 +58,10 @@ def test_ensure_hf_trace_server_preloads_model_when_already_healthy(monkeypatch)
     process = ensure_hf_trace_server(make_config())
 
     assert process is None
-    assert warmups == [make_config()]
+    assert warmups == []
 
 
-def test_ensure_hf_trace_server_preloads_model_after_start(monkeypatch) -> None:
+def test_ensure_hf_trace_server_does_not_preload_before_model_discovery_after_start(monkeypatch) -> None:
     health_calls = []
     warmups = []
 
@@ -80,7 +83,7 @@ def test_ensure_hf_trace_server_preloads_model_after_start(monkeypatch) -> None:
     process = ensure_hf_trace_server(make_config())
 
     assert isinstance(process, FakeProcess)
-    assert warmups == [make_config()]
+    assert warmups == []
 
 
 def test_preload_hf_trace_model_calls_adapter_warmup(monkeypatch) -> None:
@@ -100,5 +103,43 @@ def test_preload_hf_trace_model_calls_adapter_warmup(monkeypatch) -> None:
 
     assert calls == [
         ("init", "http://127.0.0.1:8600/api/trace"),
-        ("warmup", "Qwen/Qwen2.5-0.5B-Instruct", 20),
+        ("warmup", "Qwen/Qwen2.5-0.5B-Instruct", 180),
     ]
+
+
+def test_preload_hf_trace_model_wraps_timeout_with_operator_guidance(monkeypatch) -> None:
+    class FakeAdapter:
+        def __init__(self, trace_url):
+            pass
+
+        def warmup(self, model, *, timeout_seconds):
+            raise AdapterError("HF trace warm-up timed out")
+
+    monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
+
+    try:
+        preload_hf_trace_model(make_config())
+    except RuntimeError as error:
+        message = str(error)
+    else:
+        raise AssertionError("expected RuntimeError")
+
+    assert "Qwen/Qwen2.5-0.5B-Instruct" in message
+    assert "180 seconds" in message
+    assert "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS" in message
+
+
+def test_resolve_hf_trace_models_uses_runtime_local_models(monkeypatch) -> None:
+    class FakeAdapter:
+        def __init__(self, trace_url):
+            pass
+
+        def available_models(self, *, timeout_seconds):
+            return ["Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct"]
+
+    monkeypatch.setattr("token_trail.local_runner.HfTraceAdapter", FakeAdapter)
+
+    config = resolve_hf_trace_models(make_config())
+
+    assert config.hf_trace_model == "Qwen/Qwen2.5-3B-Instruct"
+    assert config.hf_trace_models == ("Qwen/Qwen2.5-3B-Instruct", "Qwen/Qwen2.5-1.5B-Instruct")

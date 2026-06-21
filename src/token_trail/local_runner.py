@@ -11,8 +11,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from token_trail.adapters.base import AdapterError
 from token_trail.adapters.hf_trace import HfTraceAdapter
-from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config
+from token_trail.config import PROJECT_ROOT, RuntimeConfig, load_config, with_hf_trace_models
 from token_trail.ports import check_port_or_exit
 from token_trail.server import run_server
 
@@ -59,6 +60,11 @@ def run_local_stack(config: RuntimeConfig) -> None:
     try:
         if should_manage_hf_trace(config):
             hf_process = ensure_hf_trace_server(config)
+            config = resolve_hf_trace_models(config)
+            if config.hf_trace_enabled:
+                preload_hf_trace_model(config)
+            else:
+                print("No locally installed HF trace models found; scripted prepared traces remain available.")
 
         print("Starting Token Trail using .env/default configuration...")
         run_server(host=config.host, port=config.port, config=config)
@@ -69,7 +75,6 @@ def run_local_stack(config: RuntimeConfig) -> None:
 def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | None:
     if is_hf_trace_server_healthy(config):
         print("HF trace server is already running.")
-        preload_hf_trace_model(config)
         return None
 
     host, port = hf_trace_server_address(config)
@@ -88,7 +93,6 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
 
     try:
         wait_for_hf_trace_health(config, process=process)
-        preload_hf_trace_model(config)
     except Exception:
         stop_process(process)
         raise
@@ -96,12 +100,28 @@ def ensure_hf_trace_server(config: RuntimeConfig) -> subprocess.Popen[Any] | Non
     return process
 
 
+def resolve_hf_trace_models(config: RuntimeConfig) -> RuntimeConfig:
+    models = HfTraceAdapter(config.hf_trace_url).available_models(timeout_seconds=2.0)
+    resolved = with_hf_trace_models(config, models)
+    if resolved.hf_trace_enabled:
+        print("Discovered local HF trace models: " + ", ".join(resolved.hf_trace_models))
+    return resolved
+
+
 def preload_hf_trace_model(config: RuntimeConfig) -> None:
     print(f"Preloading HF trace model {config.hf_trace_model}...")
-    HfTraceAdapter(config.hf_trace_url).warmup(
-        config.hf_trace_model,
-        timeout_seconds=config.hf_trace_timeout_seconds,
-    )
+    try:
+        HfTraceAdapter(config.hf_trace_url).warmup(
+            config.hf_trace_model,
+            timeout_seconds=config.hf_trace_warmup_timeout_seconds,
+        )
+    except AdapterError as error:
+        raise RuntimeError(
+            "HF trace model warm-up failed for "
+            f"{config.hf_trace_model} after {config.hf_trace_warmup_timeout_seconds:g} seconds. "
+            "Increase TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS, choose a smaller model, "
+            "or use scripted prepared traces."
+        ) from error
     print(f"HF trace model ready: {config.hf_trace_model}")
 
 

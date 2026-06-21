@@ -43,7 +43,7 @@ def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
     assert [option.available for option in options] == [True, True, True]
     assert [option.status for option in options] == ["ready", "ready", "running"]
     assert options[1].notes == "HF trace server is running and this model is ready."
-    assert options[2].notes == "HF trace server is running; this model loads on first use."
+    assert options[2].notes == "HF trace server is running; local model files must already be installed."
 
 
 def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:
