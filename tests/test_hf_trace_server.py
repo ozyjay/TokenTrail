@@ -41,7 +41,7 @@ class FakeTraceRunner:
                 {
                     "selected_token": " A",
                     "candidates": [{"token": " A", "probability": 0.8}],
-                    "explanation": "Top returned alternatives from the local model for this token position.",
+                    "explanation": "Candidate bars show this token's top alternatives from the local model.",
                 }
             ],
         }
@@ -580,7 +580,7 @@ def test_transformers_runner_uses_single_flight_lock_for_generation_and_preload(
                     {
                         "selected_token": " A",
                         "candidates": [{"token": " A", "probability": 0.8}],
-                        "explanation": "Top returned alternatives from the local model for this token position.",
+                        "explanation": "Candidate bars show this token's top alternatives from the local model.",
                     }
                 ],
             }

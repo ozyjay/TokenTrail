@@ -526,7 +526,7 @@ def make_trace(tokens: list[str]) -> dict:
             {
                 "selected_token": token,
                 "candidates": [{"token": token, "probability": 1.0}],
-                "explanation": "Top returned alternatives from the local model for this token position.",
+                "explanation": "Candidate bars show this token's top alternatives from the local model.",
             }
             for token in tokens
         ],

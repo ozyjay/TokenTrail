@@ -65,7 +65,7 @@ class FakeHfTraceAdapter:
                         {"token": "A", "probability": 0.62},
                         {"token": "The", "probability": 0.21},
                     ],
-                    "explanation": "Top returned alternatives from the local model for this token position.",
+                    "explanation": "Candidate bars show this token's top alternatives from the local model.",
                 }
             ],
         }
@@ -400,7 +400,7 @@ def test_hf_trace_response_keeps_prompt_tokens_visible_prompt_only() -> None:
                 {
                     "selected_token": "Tokens",
                     "candidates": [{"token": "Tokens", "probability": 0.62}],
-                    "explanation": "Top returned alternatives from the local model for this token position.",
+                    "explanation": "Candidate bars show this token's top alternatives from the local model.",
                 }
             ],
         }

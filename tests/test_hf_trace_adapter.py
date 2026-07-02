@@ -226,7 +226,7 @@ def test_generate_trace_includes_instructions_when_provided() -> None:
                     {
                         "selected_token": "A",
                         "candidates": [{"token": "A", "probability": 0.8}],
-                        "explanation": "Top returned alternatives from the local model for this token position.",
+                        "explanation": "Candidate bars show this token's top alternatives from the local model.",
                     }
                 ],
             },

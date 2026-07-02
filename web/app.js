@@ -305,7 +305,7 @@ function showHfLiveTrace(payload) {
   }
   resetDemo();
   resetPromptToTrace();
-  runNotice = "HF live trace — top returned alternatives from the local model";
+  runNotice = "HF live trace";
   explanation.textContent = runNotice;
   loadRuntimeOptions().catch((error) => {
     explanation.textContent = `Could not refresh runtime status: ${error}`;
