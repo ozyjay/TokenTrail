@@ -1,5 +1,7 @@
 # SLM Live Trace Plan
 
+> Superseded for runtime ownership by the ModelDeck migration. The response-quality requirements below still apply; Token Trail no longer starts this legacy HF trace server.
+
 The supported live small-language-model path is the primary local Hugging Face Transformers trace server. It returns the same replayable structure as scripted traces, with real prompt tokens, generated tokens, top returned candidate alternatives, and probabilities.
 
 ## Behaviour

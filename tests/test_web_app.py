@@ -4,16 +4,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_web_app_branches_hf_live_trace_to_replay_ui() -> None:
+def test_web_app_branches_modeldeck_live_trace_to_replay_ui() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
-    assert 'payload.mode === "hf-live-trace"' in app_js
-    assert "showHfLiveTrace(payload)" in app_js
+    assert 'payload.mode === "modeldeck-live-trace"' in app_js
+    assert "showModelDeckLiveTrace(payload)" in app_js
     assert "currentTrace = payload.trace" in app_js
     assert "startPreparedTrail()" in app_js
 
 
-def test_web_app_keeps_selected_trace_separate_from_hf_replay_trace() -> None:
+def test_web_app_keeps_selected_trace_separate_from_live_replay_trace() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
     assert "let selectedTrace = null;" in app_js
@@ -40,17 +40,17 @@ def test_web_app_prefers_active_trace_tokens_for_prompt_display() -> None:
     assert "renderTokens(promptTokens, trace.prompt_tokens);" in app_js
 
 
-def test_web_app_preserves_hf_decoded_token_spacing() -> None:
+def test_web_app_preserves_modeldeck_decoded_token_spacing() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
     assert "function hasDecodedSpacing(tokens)" in app_js
     assert "function joinDisplayTokens(tokens, preserveDecodedSpacing = true)" in app_js
     assert 'tokens.join("")' in app_js
     assert 'tokens.join(" ")' in app_js
-    assert 'currentTrace.mode === "hf-live-trace"' in app_js
+    assert 'currentTrace.mode === "modeldeck-live-trace"' in app_js
 
 
-def test_web_app_does_not_replace_custom_prompt_on_hf_fallback() -> None:
+def test_web_app_does_not_replace_custom_prompt_on_live_fallback() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
     fallback_body = app_js.split("function loadFallbackTrace", 1)[1].split("async function startDemo", 1)[0]
 
@@ -59,10 +59,10 @@ def test_web_app_does_not_replace_custom_prompt_on_hf_fallback() -> None:
     assert 'payload.message || "Live generation unavailable — showing prepared trace"' in fallback_body
 
 
-def test_web_app_allows_prompt_editing_for_available_hf_trace_runtimes() -> None:
+def test_web_app_allows_prompt_editing_for_available_modeldeck_runtimes() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
-    assert 'currentRuntime.backend === "hf-trace"' in app_js
+    assert 'currentRuntime.backend === "modeldeck"' in app_js
     assert "currentRuntime.available" in app_js
 
 
@@ -79,7 +79,7 @@ def test_runtime_status_is_not_repeated_as_a_visible_pill() -> None:
     assert "runtimeSelect.setAttribute(\"aria-label\"" in app_js
 
 
-def test_runtime_selector_labels_hf_warm_status() -> None:
+def test_runtime_selector_labels_runtime_status() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
     assert 'runtimeStatusLabel(option)' in app_js

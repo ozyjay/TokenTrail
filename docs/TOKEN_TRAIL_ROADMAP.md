@@ -4,10 +4,10 @@
 
 Token Trail has two runtime families:
 
-- HF live token traces as the primary backend;
+- ModelDeck live token traces as the primary backend;
 - scripted prepared traces as the mandatory fallback and secondary prepared mode.
 
-HF trace mode is the default live token-trace backend for staff-entered prompts, real prompt tokens, generated token candidates, and replayable probability bars. Scripted prepared traces remain the guaranteed public-demo fallback when HF trace is slow, unavailable, not ready, or confusing.
+ModelDeck is the default live token-trace service for staff-entered prompts, generated token candidates, and replayable probability bars. ModelDeck owns the Qwen workers and Token Trail only consumes ready aliases through its stable gateway. Scripted prepared traces remain the guaranteed public-demo fallback when ModelDeck is slow, unavailable, not ready, or confusing.
 
 ## Near-Term Polish
 

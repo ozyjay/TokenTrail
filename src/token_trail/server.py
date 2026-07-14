@@ -1,26 +1,25 @@
-"""Tiny local web server for the scripted Token Trail MVP."""
+"""Local web server for Token Trail's ModelDeck and scripted runtimes."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import mimetypes
-import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
 from token_trail.adapters.base import AdapterError
-from token_trail.adapters.hf_trace import HfTraceAdapter, HfTraceStatus, validate_trace_payload
-from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config, with_hf_trace_models
+from token_trail.adapters.modeldeck import ModelDeckAdapter, ModelDeckStatus, validate_trace_payload
+from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config
 from token_trail.runtime import RuntimeOption, RuntimeState, build_runtime_options, default_runtime_id, select_runtime
 from token_trail.traces import get_trace, list_traces
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
-HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS = 30.0
+MODELDECK_DISCOVERY_TIMEOUT_SECONDS = 2.0
 
 
 @dataclass
@@ -30,12 +29,8 @@ class ServerState:
     config: RuntimeConfig
     runtime_options: list[RuntimeOption]
     runtime_state: RuntimeState
-    hf_trace_status: HfTraceStatus
-    hf_trace_adapter: HfTraceAdapter
-    hf_warmup_statuses: dict[str, str]
-    hf_warmup_errors: dict[str, str]
-    hf_warmup_threads: dict[str, threading.Thread]
-    hf_warmup_lock: threading.Lock
+    modeldeck_status: ModelDeckStatus
+    modeldeck_adapter: ModelDeckAdapter
 
 
 class TokenTrailServer(ThreadingHTTPServer):
@@ -48,26 +43,21 @@ class TokenTrailServer(ThreadingHTTPServer):
 
 def build_server_state(
     config: RuntimeConfig,
-    hf_trace_adapter: HfTraceAdapter | None = None,
+    modeldeck_adapter: ModelDeckAdapter | None = None,
 ) -> ServerState:
     """Build runtime state at startup without doing work at import time."""
 
-    trace_adapter = hf_trace_adapter or HfTraceAdapter(config.hf_trace_url)
-    config = _config_with_runtime_hf_models(config, trace_adapter)
-    hf_trace_statuses = _hf_trace_statuses(config, trace_adapter)
-    hf_trace_status = hf_trace_statuses.get(config.hf_trace_model, HfTraceStatus(available=False))
-    runtime_options = build_runtime_options(config, hf_trace_statuses=_runtime_status_payload(hf_trace_statuses))
+    trace_adapter = modeldeck_adapter or ModelDeckAdapter(config.modeldeck_url)
+    statuses = _modeldeck_statuses(config, trace_adapter)
+    modeldeck_status = statuses.get(config.modeldeck_model, ModelDeckStatus(available=False))
+    runtime_options = build_runtime_options(config, modeldeck_statuses=_runtime_status_payload(statuses))
     runtime_state = RuntimeState(selected_id=default_runtime_id(config, runtime_options))
     return ServerState(
         config=config,
         runtime_options=runtime_options,
         runtime_state=runtime_state,
-        hf_trace_status=hf_trace_status,
-        hf_trace_adapter=trace_adapter,
-        hf_warmup_statuses={},
-        hf_warmup_errors={},
-        hf_warmup_threads={},
-        hf_warmup_lock=threading.Lock(),
+        modeldeck_status=modeldeck_status,
+        modeldeck_adapter=trace_adapter,
     )
 
 
@@ -90,8 +80,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         if self.path == "/api/runtime":
             state = self._state
-            _refresh_runtime_options(state)
-            _ensure_selected_runtime_warmup(state)
             _refresh_runtime_options(state)
             self._send_json(state.runtime_state.to_dict(state.runtime_options))
             return
@@ -132,7 +120,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(content_length).decode("utf-8") or "{}")
             state.runtime_state.selected_id = select_runtime(str(payload["runtime_id"]), state.runtime_options)
-            _ensure_selected_runtime_warmup(state)
             _refresh_runtime_options(state)
         except (KeyError, ValueError, json.JSONDecodeError) as error:
             self._send_json({"error": str(error)}, status=400)
@@ -160,11 +147,6 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         live_prompt = _live_prompt_from_payload(payload, trace.prompt)
         _refresh_runtime_options(state)
         runtime = next(option for option in state.runtime_options if option.id == runtime_id)
-        if runtime.backend == "hf-trace" and runtime.status == "loading":
-            _ensure_model_warmup(state, runtime.model)
-            self._send_json({"error": f"HF trace model {runtime.model} is still loading"}, status=409)
-            return
-
         if runtime.backend == "scripted":
             self._send_json(
                 {
@@ -177,28 +159,28 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if runtime.backend == "hf-trace" and runtime.available and runtime.model:
+        if runtime.backend == "modeldeck" and runtime.available and runtime.model:
             try:
-                hf_trace = state.hf_trace_adapter.generate_trace(
+                modeldeck_trace = state.modeldeck_adapter.generate_trace(
                     prompt=live_prompt,
-                    instructions=state.config.hf_trace_instructions,
+                    instructions=state.config.modeldeck_instructions,
                     model=runtime.model,
-                    max_new_tokens=state.config.hf_trace_max_new_tokens,
-                    top_k=state.config.hf_trace_top_k,
-                    temperature=state.config.hf_trace_temperature,
-                    timeout_seconds=state.config.hf_trace_timeout_seconds,
+                    max_new_tokens=state.config.modeldeck_max_new_tokens,
+                    top_k=state.config.modeldeck_top_k,
+                    temperature=state.config.modeldeck_temperature,
+                    timeout_seconds=state.config.modeldeck_timeout_seconds,
                 )
-                validate_trace_payload(hf_trace)
+                validate_trace_payload(modeldeck_trace)
             except AdapterError as error:
                 self._send_json(_scripted_fallback_payload(runtime_id, trace, reason=str(error)))
                 return
 
             self._send_json(
                 {
-                    "mode": "hf-live-trace",
+                    "mode": "modeldeck-live-trace",
                     "runtime_id": runtime_id,
                     "fallback_used": False,
-                    "trace": hf_trace,
+                    "trace": modeldeck_trace,
                 }
             )
             return
@@ -252,137 +234,53 @@ def _scripted_fallback_payload(runtime_id: str, trace, *, reason: str | None = N
     }
 
 
-def _config_with_runtime_hf_models(config: RuntimeConfig, adapter: HfTraceAdapter) -> RuntimeConfig:
-    if not config.hf_trace_enabled:
-        return config
-    try:
-        discovery = adapter.models(timeout_seconds=HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS)
-    except AdapterError:
-        return config
-    models = tuple(entry["model"] for entry in discovery["models"])
-    if not models:
-        return config
-    selected = config.hf_trace_model if config.hf_trace_model in models else str(discovery["selected_model"])
-    return with_hf_trace_models(config, (selected, *models))
-
-
-def _hf_trace_statuses(config: RuntimeConfig, adapter: HfTraceAdapter) -> dict[str, HfTraceStatus]:
-    if not config.hf_trace_enabled:
+def _modeldeck_statuses(config: RuntimeConfig, adapter: ModelDeckAdapter) -> dict[str, ModelDeckStatus]:
+    if not config.modeldeck_enabled:
         return {}
 
     try:
-        discovery = adapter.models(timeout_seconds=HF_TRACE_MODEL_DISCOVERY_TIMEOUT_SECONDS)
+        discovery = adapter.models(timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS)
+    except AdapterError as error:
         return {
-            entry["model"]: HfTraceStatus(
-                available=bool(entry["available"]),
-                model_loaded=bool(entry["loaded"]),
-                error=None if entry["available"] else str(entry["reason"]),
-            )
-            for entry in discovery["models"]
+            model: ModelDeckStatus(available=False, error=str(error))
+            for model in config.modeldeck_models
         }
-    except AdapterError:
-        pass
 
-    statuses: dict[str, HfTraceStatus] = {}
-    for model in config.hf_trace_models:
-        statuses[model] = adapter.status(
-            model=model,
-            max_new_tokens=1,
-            top_k=1,
-            temperature=0,
-            timeout_seconds=min(config.hf_trace_timeout_seconds, 2.0),
-        )
+    advertised = {entry["id"]: entry for entry in discovery["data"]}
+    statuses: dict[str, ModelDeckStatus] = {}
+    for model in config.modeldeck_models:
+        entry = advertised.get(model)
+        if entry is None:
+            statuses[model] = ModelDeckStatus(
+                available=False,
+                error=f"ModelDeck does not advertise alias {model}",
+            )
+            continue
+        ready = bool(entry["ready"])
+        provider = entry.get("effective_provider")
+        reason = f"Ready through {provider}" if ready and provider else f"ModelDeck alias {model} has no ready worker"
+        statuses[model] = ModelDeckStatus(available=ready, model_loaded=ready, error=reason)
     return statuses
 
 
-def _runtime_status_payload(statuses: dict[str, HfTraceStatus]) -> dict[str, dict]:
+def _runtime_status_payload(statuses: dict[str, ModelDeckStatus]) -> dict[str, dict]:
     return {
         model: {
             "available": status.available,
             "model_loaded": status.model_loaded,
-            "reason": status.error if status.error else ("Loaded" if status.model_loaded else "Available locally; not loaded"),
+            "reason": status.error,
         }
         for model, status in statuses.items()
     }
 
 
-def _runtime_status_payload_for_state(state: ServerState, statuses: dict[str, HfTraceStatus]) -> dict[str, dict]:
-    payload: dict[str, dict] = {
-        model: {"available": status.available, "model_loaded": status.model_loaded}
-        for model, status in statuses.items()
-    }
-    with state.hf_warmup_lock:
-        warmup_statuses = dict(state.hf_warmup_statuses)
-        warmup_errors = dict(state.hf_warmup_errors)
-
-    for model, warmup_status in warmup_statuses.items():
-        model_payload = payload.setdefault(model, {"available": True, "model_loaded": False})
-        if warmup_status == "loading":
-            model_payload["available"] = True
-            model_payload["loading"] = True
-            model_payload["model_loaded"] = False
-        elif warmup_status == "ready":
-            model_payload["available"] = True
-            model_payload["model_loaded"] = True
-        elif warmup_status == "error":
-            model_payload["available"] = False
-            model_payload["model_loaded"] = False
-            model_payload["error"] = warmup_errors.get(model, "HF trace model warm-up failed")
-    return payload
-
-
 def _refresh_runtime_options(state: ServerState) -> None:
-    statuses = _hf_trace_statuses(state.config, state.hf_trace_adapter)
-    state.hf_trace_status = statuses.get(state.config.hf_trace_model, HfTraceStatus(available=False))
-    state.runtime_options = build_runtime_options(state.config, hf_trace_statuses=_runtime_status_payload_for_state(state, statuses))
-
-
-def _ensure_selected_runtime_warmup(state: ServerState) -> None:
-    runtime = next((option for option in state.runtime_options if option.id == state.runtime_state.selected_id), None)
-    if runtime is None or runtime.backend != "hf-trace":
-        return
-    _ensure_model_warmup(state, runtime.model)
-
-
-def _ensure_model_warmup(state: ServerState, model: str | None) -> None:
-    if not model:
-        return
-    status = state.hf_trace_adapter.status(model=model, timeout_seconds=min(state.config.hf_trace_timeout_seconds, 2.0))
-    if not status.available:
-        return
-    if status.model_loaded:
-        with state.hf_warmup_lock:
-            state.hf_warmup_statuses[model] = "ready"
-            state.hf_warmup_errors.pop(model, None)
-        return
-
-    with state.hf_warmup_lock:
-        existing = state.hf_warmup_threads.get(model)
-        if existing is not None and existing.is_alive():
-            state.hf_warmup_statuses[model] = "loading"
-            return
-        if state.hf_warmup_statuses.get(model) == "ready":
-            return
-
-        state.hf_warmup_statuses[model] = "loading"
-        state.hf_warmup_errors.pop(model, None)
-        thread = threading.Thread(target=_warm_model, args=(state, model), daemon=True)
-        state.hf_warmup_threads[model] = thread
-        thread.start()
-
-
-def _warm_model(state: ServerState, model: str) -> None:
-    try:
-        state.hf_trace_adapter.warmup(model, timeout_seconds=state.config.hf_trace_warmup_timeout_seconds)
-    except AdapterError as error:
-        with state.hf_warmup_lock:
-            state.hf_warmup_statuses[model] = "error"
-            state.hf_warmup_errors[model] = str(error)
-        return
-
-    with state.hf_warmup_lock:
-        state.hf_warmup_statuses[model] = "ready"
-        state.hf_warmup_errors.pop(model, None)
+    statuses = _modeldeck_statuses(state.config, state.modeldeck_adapter)
+    state.modeldeck_status = statuses.get(state.config.modeldeck_model, ModelDeckStatus(available=False))
+    state.runtime_options = build_runtime_options(
+        state.config,
+        modeldeck_statuses=_runtime_status_payload(statuses),
+    )
 
 
 def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:
@@ -419,7 +317,7 @@ def run_server(
 
 def main() -> None:
     config = load_config()
-    parser = argparse.ArgumentParser(description="Run the Token Trail scripted MVP server.")
+    parser = argparse.ArgumentParser(description="Run the Token Trail demo server.")
     parser.add_argument("--host", default=None, help="Host/interface to bind")
     parser.add_argument("--port", default=None, type=int, help="Port to bind")
     args = parser.parse_args()

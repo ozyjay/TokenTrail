@@ -14,6 +14,8 @@ DEFAULT_ENV_FILE = PROJECT_ROOT / ".env"
 DEFAULT_MODEL_CONFIG_PATH = ""
 DEFAULT_TOKEN_TRAIL_PORT = 3100
 DEFAULT_TOKEN_TRAIL_BACKEND_PORT = 8100
+DEFAULT_MODELDECK_URL = "http://127.0.0.1:8600"
+DEFAULT_MODELDECK_MODEL = "qwen-1-5b"
 DEFAULT_HF_TRACE_URL = "http://127.0.0.1:8600/api/trace"
 DEFAULT_HF_TRACE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 DEFAULT_HF_TRACE_TOP_K = 5
@@ -35,6 +37,7 @@ Do not explain the task.
 
 End with a full stop."""
 DEFAULT_HF_TRACE_INSTRUCTIONS_PATH = PROJECT_ROOT / "config" / "instructions" / "hf_trace_default.txt"
+DEFAULT_MODELDECK_INSTRUCTIONS_PATH = PROJECT_ROOT / "config" / "instructions" / "modeldeck_default.txt"
 
 
 @dataclass(frozen=True)
@@ -46,6 +49,15 @@ class RuntimeConfig:
     port: int
     backend_port: int
     model_config_path: str = DEFAULT_MODEL_CONFIG_PATH
+    modeldeck_enabled: bool = False
+    modeldeck_url: str = DEFAULT_MODELDECK_URL
+    modeldeck_model: str = DEFAULT_MODELDECK_MODEL
+    modeldeck_models: tuple[str, ...] = ()
+    modeldeck_top_k: int = DEFAULT_HF_TRACE_TOP_K
+    modeldeck_max_new_tokens: int = DEFAULT_HF_TRACE_MAX_NEW_TOKENS
+    modeldeck_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
+    modeldeck_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
+    modeldeck_instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS
     hf_trace_enabled: bool = False
     hf_trace_url: str = DEFAULT_HF_TRACE_URL
     hf_trace_model: str = DEFAULT_HF_TRACE_MODEL
@@ -58,6 +70,10 @@ class RuntimeConfig:
     hf_trace_instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS
 
     def __post_init__(self) -> None:
+        if not self.modeldeck_models:
+            object.__setattr__(self, "modeldeck_models", (self.modeldeck_model,))
+        elif self.modeldeck_model not in self.modeldeck_models:
+            object.__setattr__(self, "modeldeck_models", (self.modeldeck_model, *self.modeldeck_models))
         if not self.hf_trace_models:
             object.__setattr__(self, "hf_trace_models", (self.hf_trace_model,))
         elif self.hf_trace_model not in self.hf_trace_models:
@@ -80,6 +96,17 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
             return model_default
         return default
 
+    modeldeck_model = get_setting(
+        "TOKEN_TRAIL_MODELDECK_MODEL",
+        DEFAULT_MODELDECK_MODEL,
+        _model_config_default(model_config, "modeldeck_model"),
+    )
+    modeldeck_models = _model_config_models(model_config, "modeldeck") or (modeldeck_model,)
+    modeldeck_instructions_file = get_setting(
+        "TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE",
+        str(DEFAULT_MODELDECK_INSTRUCTIONS_PATH),
+        _model_config_default(model_config, "modeldeck_instructions_file"),
+    )
     hf_trace_model = get_setting(
         "TOKEN_TRAIL_HF_TRACE_MODEL",
         DEFAULT_HF_TRACE_MODEL,
@@ -98,6 +125,25 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         port=int(get_setting("TOKEN_TRAIL_PORT", str(DEFAULT_TOKEN_TRAIL_PORT))),
         backend_port=int(get_setting("TOKEN_TRAIL_BACKEND_PORT", str(DEFAULT_TOKEN_TRAIL_BACKEND_PORT))),
         model_config_path=model_config_path,
+        modeldeck_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_MODELDECK_ENABLED", "false")),
+        modeldeck_url=get_setting("TOKEN_TRAIL_MODELDECK_URL", DEFAULT_MODELDECK_URL).rstrip("/"),
+        modeldeck_model=modeldeck_model,
+        modeldeck_models=_parse_csv_setting(
+            get_setting("TOKEN_TRAIL_MODELDECK_MODELS", ",".join(modeldeck_models))
+        ),
+        modeldeck_top_k=int(get_setting("TOKEN_TRAIL_MODELDECK_TOP_K", str(DEFAULT_HF_TRACE_TOP_K))),
+        modeldeck_max_new_tokens=int(
+            get_setting("TOKEN_TRAIL_MODELDECK_MAX_NEW_TOKENS", str(DEFAULT_HF_TRACE_MAX_NEW_TOKENS))
+        ),
+        modeldeck_temperature=float(
+            get_setting("TOKEN_TRAIL_MODELDECK_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))
+        ),
+        modeldeck_timeout_seconds=float(
+            get_setting("TOKEN_TRAIL_MODELDECK_TIMEOUT_SECONDS", str(DEFAULT_HF_TRACE_TIMEOUT_SECONDS))
+        ),
+        modeldeck_instructions=_load_instruction_text(
+            _resolve_project_path(modeldeck_instructions_file, env_file)
+        ),
         hf_trace_enabled=_parse_bool_setting(get_setting("TOKEN_TRAIL_HF_TRACE_ENABLED", "false")),
         hf_trace_url=get_setting("TOKEN_TRAIL_HF_TRACE_URL", DEFAULT_HF_TRACE_URL),
         hf_trace_model=hf_trace_model,

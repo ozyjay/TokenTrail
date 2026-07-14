@@ -29,6 +29,15 @@ def clear_token_trail_env(monkeypatch) -> None:
         "TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS",
         "TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE",
         "TOKEN_TRAIL_MODEL_CONFIG_PATH",
+        "TOKEN_TRAIL_MODELDECK_ENABLED",
+        "TOKEN_TRAIL_MODELDECK_URL",
+        "TOKEN_TRAIL_MODELDECK_MODEL",
+        "TOKEN_TRAIL_MODELDECK_MODELS",
+        "TOKEN_TRAIL_MODELDECK_TOP_K",
+        "TOKEN_TRAIL_MODELDECK_MAX_NEW_TOKENS",
+        "TOKEN_TRAIL_MODELDECK_TEMPERATURE",
+        "TOKEN_TRAIL_MODELDECK_TIMEOUT_SECONDS",
+        "TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -86,6 +95,25 @@ def test_config_reads_environment_overrides(monkeypatch) -> None:
     assert config.hf_trace_temperature == 0.1
     assert config.hf_trace_timeout_seconds == 6.5
     assert config.hf_trace_warmup_timeout_seconds == 90.0
+
+
+def test_config_reads_modeldeck_environment_overrides(monkeypatch) -> None:
+    clear_token_trail_env(monkeypatch)
+    monkeypatch.setenv("TOKEN_TRAIL_BACKEND", "modeldeck")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_ENABLED", "true")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_URL", "http://127.0.0.1:9600/")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_MODEL", "qwen-3b")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_MODELS", "qwen-0-5b,qwen-1-5b,qwen-3b")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_TIMEOUT_SECONDS", "8.5")
+
+    config = load_config(env_file=None)
+
+    assert config.backend == "modeldeck"
+    assert config.modeldeck_enabled is True
+    assert config.modeldeck_url == "http://127.0.0.1:9600"
+    assert config.modeldeck_model == "qwen-3b"
+    assert config.modeldeck_models == ("qwen-0-5b", "qwen-1-5b", "qwen-3b")
+    assert config.modeldeck_timeout_seconds == 8.5
 
 
 def test_config_loads_hf_trace_instructions_file(monkeypatch, tmp_path) -> None:

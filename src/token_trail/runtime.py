@@ -41,8 +41,7 @@ class RuntimeState:
 
 def build_runtime_options(
     config: RuntimeConfig,
-    hf_trace_available: bool = False,
-    hf_trace_statuses: Mapping[str, Mapping[str, bool]] | None = None,
+    modeldeck_statuses: Mapping[str, Mapping[str, bool]] | None = None,
 ) -> list[RuntimeOption]:
     """Build selectable runtime options from config."""
 
@@ -58,36 +57,24 @@ def build_runtime_options(
         )
     ]
 
-    if config.hf_trace_enabled:
-        for model in config.hf_trace_models:
-            status_payload = (hf_trace_statuses or {}).get(model, {})
-            model_available = bool(status_payload.get("available", hf_trace_available))
-            model_loaded = bool(status_payload.get("model_loaded", False))
-            model_loading = bool(status_payload.get("loading", False))
+    if config.modeldeck_enabled:
+        for model in config.modeldeck_models:
+            status_payload = (modeldeck_statuses or {}).get(model, {})
+            model_available = bool(status_payload.get("available", False))
             reason = status_payload.get("reason")
-            if not model_available:
-                status = "unavailable"
-                notes = reason if isinstance(reason, str) and reason else (
-                    "Configured HF trace server is unavailable; scripted fallback remains available."
-                )
-            elif model_loaded:
-                status = "ready"
-                notes = "Loaded and ready."
-            elif model_loading:
-                model_available = False
-                status = "loading"
-                notes = "HF trace server is loading this model."
-            else:
-                status = "idle"
-                notes = "Available locally; will warm before use."
+            notes = (
+                reason
+                if isinstance(reason, str) and reason
+                else "Ready through ModelDeck" if model_available else "No ready ModelDeck worker; scripted fallback remains available."
+            )
             options.append(
                 RuntimeOption(
-                    id=f"hf-trace:{model}",
-                    label=f"HF trace · {model}",
-                    backend="hf-trace",
+                    id=f"modeldeck:{model}",
+                    label=f"ModelDeck · {model}",
+                    backend="modeldeck",
                     model=model,
                     available=model_available,
-                    status=status,
+                    status="ready" if model_available else "unavailable",
                     notes=notes,
                 )
             )
@@ -98,10 +85,12 @@ def build_runtime_options(
 def default_runtime_id(config: RuntimeConfig, options: list[RuntimeOption]) -> str:
     """Choose the initial runtime option from config, falling back safely."""
 
-    configured_model = config.hf_trace_model if config.backend == "hf-trace" else None
+    configured_model = None
+    if config.backend == "modeldeck":
+        configured_model = config.modeldeck_model
 
     for option in options:
-        if option.backend == config.backend and option.model == configured_model:
+        if option.backend == config.backend and option.model == configured_model and option.available:
             return option.id
 
     return options[0].id

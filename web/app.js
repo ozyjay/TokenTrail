@@ -114,7 +114,7 @@ function updatePlayButton() {
 }
 
 function isSelectedRuntimeLoading() {
-  return Boolean(currentRuntime && currentRuntime.backend === "hf-trace" && currentRuntime.status === "loading");
+  return false;
 }
 
 function pollSelectedRuntimeUntilSettled(requestId) {
@@ -183,7 +183,7 @@ function simpleTokenise(text) {
 }
 
 function canEditPrompt() {
-  return currentRuntime && currentRuntime.backend === "hf-trace" && currentRuntime.available;
+  return currentRuntime && currentRuntime.backend === "modeldeck" && currentRuntime.available;
 }
 
 function resetPromptToTrace() {
@@ -273,7 +273,7 @@ function runStep() {
   const step = currentTrace.steps[stepIndex];
   renderCandidates(step);
   generatedTokens.push(step.selected_token);
-  generatedText.textContent = joinDisplayTokens(generatedTokens, currentTrace.mode === "hf-live-trace");
+  generatedText.textContent = joinDisplayTokens(generatedTokens, currentTrace.mode === "modeldeck-live-trace");
   explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
   stepIndex += 1;
   scheduleNextStep();
@@ -299,13 +299,13 @@ async function generateTrace() {
   return payload;
 }
 
-function showHfLiveTrace(payload) {
+function showModelDeckLiveTrace(payload) {
   if (payload.trace) {
     currentTrace = payload.trace;
   }
   resetDemo();
   resetPromptToTrace();
-  runNotice = "HF live trace";
+  runNotice = "ModelDeck live trace";
   explanation.textContent = runNotice;
   loadRuntimeOptions().catch((error) => {
     explanation.textContent = `Could not refresh runtime status: ${error}`;
@@ -339,8 +339,8 @@ async function startDemo() {
     playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
     try {
       const payload = await generateTrace();
-      if (payload.mode === "hf-live-trace") {
-        showHfLiveTrace(payload);
+      if (payload.mode === "modeldeck-live-trace") {
+        showModelDeckLiveTrace(payload);
       } else {
         loadFallbackTrace(payload);
       }

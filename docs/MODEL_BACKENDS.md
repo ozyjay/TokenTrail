@@ -1,36 +1,12 @@
-# Model Backends
+# Model backends
 
 Token Trail supports two runtime families:
 
 | Runtime | Role |
 | --- | --- |
-| HF trace server | Primary live token-trace backend with prompt tokens and candidate probabilities |
-| Scripted prepared traces | Mandatory scripted fallback and secondary prepared mode for the public demo |
+| ModelDeck | Primary live token traces from ready, externally managed Qwen workers |
+| Scripted prepared traces | Mandatory deterministic fallback |
 
-The HF trace server is the only live backend. The app does not expose paragraph-only live generation or other live runtime families. Normal operation is:
+Token Trail discovers `qwen-0-5b`, `qwen-1-5b`, and `qwen-3b` through ModelDeck `GET /v1/models`, then requests a native trace through `POST /native/autoregressive/trace`. It does not own worker lifecycle, warm-up, model downloads, or GPU memory.
 
-1. Start the HF trace server.
-2. Discover locally available configured models through `GET /api/models`.
-3. Warm the selected available model through `POST /api/warmup`.
-4. Run HF trace mode when the selected model is ready.
-5. Fall back to scripted prepared traces if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete.
-
-## HF Trace Contract
-
-HF traces must return:
-
-- `mode: "hf-live-trace"`;
-- `prompt_tokens`;
-- generated `steps`;
-- top returned candidate tokens and probabilities for each retained step;
-- explanations for each retained step.
-
-The server keeps only generated steps through the first complete sentence after at least eight generated steps. If no complete sentence is found within the generation budget, Token Trail uses the scripted fallback payload. Public wording should say: "The bars show top returned token alternatives from the local model, not private reasoning."
-
-## Configuration
-
-```text
-TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-```
-
-Runtime-selectable HF trace models are configured in `config/models.json`. The HF trace server reports which configured models are locally available through `GET /api/models`; discovery does not download models or load full model weights. `TOKEN_TRAIL_HF_TRACE_MODEL` is a preferred initial model only when it is already installed locally.
+If the gateway or a configured alias is unavailable, Token Trail starts normally and reports that runtime as unavailable. Scripted mode remains ready.

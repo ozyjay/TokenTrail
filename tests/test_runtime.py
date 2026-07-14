@@ -2,19 +2,12 @@ from token_trail.config import RuntimeConfig
 from token_trail.runtime import build_runtime_options, default_runtime_id, select_runtime
 
 
-def make_config(backend: str = "scripted", *, hf_trace_enabled: bool = False) -> RuntimeConfig:
+def make_config(backend: str = "scripted") -> RuntimeConfig:
     return RuntimeConfig(
         backend=backend,
         host="127.0.0.1",
         port=3100,
         backend_port=8100,
-        hf_trace_enabled=hf_trace_enabled,
-        hf_trace_url="http://127.0.0.1:8600/api/trace",
-        hf_trace_model="Qwen/Qwen2.5-1.5B-Instruct",
-        hf_trace_models=("Qwen/Qwen2.5-1.5B-Instruct", "Qwen/Qwen2.5-0.5B-Instruct"),
-        hf_trace_top_k=5,
-        hf_trace_max_new_tokens=96,
-        hf_trace_temperature=0.3,
     )
 
 
@@ -22,70 +15,38 @@ def test_build_runtime_options_includes_only_scripted_by_default() -> None:
     options = build_runtime_options(make_config())
 
     assert [option.id for option in options] == ["scripted:prepared-traces"]
-    assert options[0].available
 
 
-def test_build_runtime_options_includes_hf_trace_when_enabled() -> None:
+def test_build_runtime_options_includes_ready_modeldeck_aliases() -> None:
+    config = make_config()
+    config = RuntimeConfig(
+        **{
+            **config.__dict__,
+            "backend": "modeldeck",
+            "modeldeck_enabled": True,
+            "modeldeck_model": "qwen-1-5b",
+            "modeldeck_models": ("qwen-0-5b", "qwen-1-5b", "qwen-3b"),
+        }
+    )
+
     options = build_runtime_options(
-        make_config(hf_trace_enabled=True),
-        hf_trace_statuses={
-            "Qwen/Qwen2.5-1.5B-Instruct": {
-                "available": True,
-                "model_loaded": True,
-                "reason": "Loaded",
-            },
-            "Qwen/Qwen2.5-0.5B-Instruct": {
-                "available": True,
-                "model_loaded": False,
-                "reason": "Available locally; not loaded",
-            },
+        config,
+        modeldeck_statuses={
+            "qwen-0-5b": {"available": True, "model_loaded": True, "reason": "Ready through qwen-small-rocm"},
+            "qwen-1-5b": {"available": True, "model_loaded": True, "reason": "Ready through qwen-1-5b-rocm"},
+            "qwen-3b": {"available": False, "model_loaded": False, "reason": "No ready worker"},
         },
     )
 
-    assert [option.id for option in options] == [
+    assert [option.id for option in options[:4]] == [
         "scripted:prepared-traces",
-        "hf-trace:Qwen/Qwen2.5-1.5B-Instruct",
-        "hf-trace:Qwen/Qwen2.5-0.5B-Instruct",
+        "modeldeck:qwen-0-5b",
+        "modeldeck:qwen-1-5b",
+        "modeldeck:qwen-3b",
     ]
-    assert [option.backend for option in options] == ["scripted", "hf-trace", "hf-trace"]
-    assert [option.available for option in options] == [True, True, True]
-    assert [option.status for option in options] == ["ready", "ready", "idle"]
-    assert options[1].notes == "Loaded and ready."
-    assert options[2].notes == "Available locally; will warm before use."
-
-
-def test_hf_trace_options_show_missing_configured_model_reason() -> None:
-    options = build_runtime_options(
-        make_config(hf_trace_enabled=True),
-        hf_trace_statuses={
-            "Qwen/Qwen2.5-1.5B-Instruct": {
-                "available": False,
-                "model_loaded": False,
-                "reason": "Configured but not found locally",
-            },
-        },
-    )
-    hf_option = next(option for option in options if option.model == "Qwen/Qwen2.5-1.5B-Instruct")
-
-    assert not hf_option.available
-    assert hf_option.status == "unavailable"
-    assert hf_option.notes == "Configured but not found locally"
-
-
-def test_hf_trace_options_show_unavailable_when_probe_fails() -> None:
-    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=False)
-    hf_option = next(option for option in options if option.backend == "hf-trace")
-
-    assert not hf_option.available
-    assert hf_option.status == "unavailable"
-    assert hf_option.notes == "Configured HF trace server is unavailable; scripted fallback remains available."
-
-
-def test_default_runtime_uses_configured_hf_trace_when_available() -> None:
-    config = make_config(backend="hf-trace", hf_trace_enabled=True)
-    options = build_runtime_options(config, hf_trace_available=True)
-
-    assert default_runtime_id(config, options) == "hf-trace:Qwen/Qwen2.5-1.5B-Instruct"
+    assert default_runtime_id(config, options) == "modeldeck:qwen-1-5b"
+    assert options[3].status == "unavailable"
+    assert options[0].available
 
 
 def test_default_runtime_falls_back_to_scripted_for_unknown_backend() -> None:
@@ -95,7 +56,30 @@ def test_default_runtime_falls_back_to_scripted_for_unknown_backend() -> None:
     assert default_runtime_id(config, options) == "scripted:prepared-traces"
 
 
-def test_select_runtime_validates_known_ids() -> None:
-    options = build_runtime_options(make_config(hf_trace_enabled=True), hf_trace_available=True)
+def test_default_runtime_falls_back_to_scripted_when_modeldeck_alias_is_unready() -> None:
+    config = RuntimeConfig(
+        **{
+            **make_config().__dict__,
+            "backend": "modeldeck",
+            "modeldeck_enabled": True,
+            "modeldeck_model": "qwen-1-5b",
+            "modeldeck_models": ("qwen-1-5b",),
+        }
+    )
+    options = build_runtime_options(config, modeldeck_statuses={"qwen-1-5b": {"available": False}})
 
-    assert select_runtime("hf-trace:Qwen/Qwen2.5-0.5B-Instruct", options) == "hf-trace:Qwen/Qwen2.5-0.5B-Instruct"
+    assert default_runtime_id(config, options) == "scripted:prepared-traces"
+
+
+def test_select_runtime_validates_known_ids() -> None:
+    config = RuntimeConfig(
+        **{
+            **make_config().__dict__,
+            "modeldeck_enabled": True,
+            "modeldeck_model": "qwen-1-5b",
+            "modeldeck_models": ("qwen-1-5b",),
+        }
+    )
+    options = build_runtime_options(config, modeldeck_statuses={"qwen-1-5b": {"available": True}})
+
+    assert select_runtime("modeldeck:qwen-1-5b", options) == "modeldeck:qwen-1-5b"

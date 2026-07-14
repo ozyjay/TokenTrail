@@ -20,7 +20,7 @@ These are not owned by Token Trail, but they are likely to exist on the same mac
 | `3300` | Text Diffusion Lab | Supporting generative-text demo |
 | `3400` | AI With Guardrails | State/guardrails demo |
 | `8500` | NeCTAR Lab Coach mock | Local fallback/mock endpoint |
-| `8600` | Token Trail HF trace server | Local replayable token-trace API |
+| `8600` | ModelDeck stable gateway | Externally managed model and native token-trace API |
 | `11434` | External model tooling | Not used by Token Trail |
 | `8000` | External model tooling | Not used by Token Trail |
 

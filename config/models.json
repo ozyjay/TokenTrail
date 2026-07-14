@@ -1,17 +1,18 @@
 {
   "defaults": {
-    "backend": "hf-trace",
-    "hf_trace_model": "Qwen/Qwen2.5-1.5B-Instruct"
+    "backend": "modeldeck",
+    "modeldeck_model": "qwen-1-5b",
+    "modeldeck_instructions_file": "config/instructions/modeldeck_default.txt"
   },
-  "hf_trace": [
+  "modeldeck": [
     {
-      "model": "Qwen/Qwen2.5-0.5B-Instruct"
+      "model": "qwen-0-5b"
     },
     {
-      "model": "Qwen/Qwen2.5-1.5B-Instruct"
+      "model": "qwen-1-5b"
     },
     {
-      "model": "Qwen/Qwen2.5-3B-Instruct"
+      "model": "qwen-3b"
     }
   ]
 }

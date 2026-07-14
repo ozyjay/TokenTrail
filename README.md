@@ -1,61 +1,59 @@
 # Token Trail
 
-Token Trail is a local Open Day demo that shows text generation one token at a time. Visitors choose a curated prompt, then watch prompt tokens, next-token candidates, probabilities, and generated text build up as a replayable trail.
+Token Trail is an Open Day demo that replays next-token choices and their probabilities. Its primary live backend is the externally managed [ModelDeck](../ModelDeck/README.md) gateway; scripted prepared traces remain the guaranteed fallback.
 
-Current app status: **primary Hugging Face Transformers live token traces with scripted prepared traces as the guaranteed fallback.** HF trace mode lets staff enter a custom prompt and replays real prompt tokens, generated tokens, top returned alternatives, and probabilities from the local HF trace server. Scripted prepared traces remain mandatory for public reliability when HF trace is not ready, too slow, or fails.
+## Runtime modes
 
-## Runtime Families
-
-| Runtime | Purpose | Status |
+| Runtime | Purpose | Availability |
 | --- | --- | --- |
-| `hf-trace:<model>` | Default live token-trace backend from the local HF trace server | Primary when enabled and healthy |
-| `scripted:prepared-traces` | Guaranteed scripted fallback and secondary prepared mode | Always available |
+| `modeldeck:<alias>` | Live token traces from a ready ModelDeck Qwen worker | Primary when the alias is ready |
+| `scripted:prepared-traces` | Curated deterministic traces | Always available |
 
-The browser UI exposes only these runtime families. Normal operation is to start the HF trace server, discover which configured HF models are locally available, warm the selected available model, then start Token Trail ready for HF trace mode. Scripted prepared traces remain the fallback if HF trace is slow, unavailable, unstable, unreadable, confusing, or incomplete. The bars show top returned token alternatives from the local model, not private reasoning.
+The configured aliases are `qwen-0-5b`, `qwen-1-5b`, and `qwen-3b`. ModelDeck owns model discovery, loading, warm-up, process isolation, and GPU memory. Token Trail only reads `GET /v1/models` and sends generation requests to `POST /native/autoregressive/trace`; it never starts, warms, stops, or downloads models.
 
-## Setup
+## Setup and run
+
+Install Token Trail's Python environment:
 
 ```powershell
-pwsh -NoProfile -File ./scripts/setup.ps1
-pwsh -NoProfile -File ./scripts/test.ps1
+poetry install
+```
+
+Start ModelDeck separately and make the required Qwen workers ready using its operator console or management API. Then start this demo:
+
+```powershell
 pwsh -NoProfile -File ./scripts/run.ps1
 ```
 
-HF trace dependencies are installed by the normal Poetry setup.
+Open <http://127.0.0.1:3100>. If ModelDeck is unreachable or an alias has no ready worker, that runtime is shown as unavailable and the scripted mode remains usable.
 
-## HF Trace
+## Configuration
 
-HF trace runtime options come from configured model candidates in `config/models.json`. `GET /api/models` checks those configured candidates against the local Hugging Face cache without downloading models or loading full model weights. Use `TOKEN_TRAIL_HF_TRACE_MODEL` only as a preferred initial model when that model is already installed locally:
+Copy `.env.example` to `.env` for machine-specific overrides. The normal live configuration is:
 
-```text
+```dotenv
 TOKEN_TRAIL_MODEL_CONFIG_PATH=config/models.json
-TOKEN_TRAIL_HF_TRACE_MODEL=Qwen/Qwen2.5-1.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_MODELS=Qwen/Qwen2.5-1.5B-Instruct,Qwen/Qwen2.5-0.5B-Instruct
-TOKEN_TRAIL_HF_TRACE_WARMUP_TIMEOUT_SECONDS=180
-TOKEN_TRAIL_HF_TRACE_INSTRUCTIONS_FILE=config/instructions/hf_trace_default.txt
+TOKEN_TRAIL_BACKEND=modeldeck
+TOKEN_TRAIL_MODELDECK_ENABLED=true
+TOKEN_TRAIL_MODELDECK_URL=http://127.0.0.1:8600
+TOKEN_TRAIL_MODELDECK_MODEL=qwen-1-5b
+TOKEN_TRAIL_MODELDECK_MODELS=qwen-0-5b,qwen-1-5b,qwen-3b
+TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE=config/instructions/modeldeck_default.txt
 ```
 
-HF trace generation also receives the fixed instruction prompt in `config/instructions/hf_trace_default.txt`. That hidden prompt keeps public demo responses short, complete, and suitable for visitors; the visible prompt and visible prompt tokens remain the staff-entered prompt.
+The fixed hidden instruction keeps public responses short and suitable for the demo. Token Trail sends it as a system message while retaining the staff-entered prompt as the visible prompt.
 
-Run the local probe with the documented candidate source. Probe and server loads use locally cached/installed model files by default; they should not download model weights during the booth flow.
+ModelDeck protocol v1 returns prompt token IDs rather than decoded prompt-token strings. Token Trail displays those IDs in angle brackets after generation; generated tokens and candidate bars use the exact decoded tokens and probabilities returned by the worker.
+
+## Behaviour and privacy
+
+- Live output is trimmed to the first complete sentence after at least eight generated steps.
+- Candidate bars are top returned alternatives from the local model, not private reasoning.
+- A failed, slow, malformed, or incomplete live trace falls back to the selected prepared trace.
+- Visitor prompts and generated responses are not stored by default.
+
+## Verification
 
 ```powershell
-pwsh -NoProfile -File ./scripts/probe_hf_trace.ps1 --candidate-source forward-logits
+pwsh -NoProfile -File ./scripts/test.ps1
 ```
-
-Use `--allow-download` only for an intentional setup/probe download before the demo.
-
-`scripts/run.ps1` starts the local HF trace server when `TOKEN_TRAIL_BACKEND=hf-trace` and `TOKEN_TRAIL_HF_TRACE_ENABLED=true`. It waits for `/health`, calls `GET /api/models`, chooses the configured default model when available or the first available configured model otherwise, then calls `POST /api/warmup` for that selected model before starting Token Trail. If no configured HF model is locally available, startup fails visibly so the operator can cache/download one configured model or use scripted prepared traces.
-
-## UX Notes
-
-- Trail speed presets are Slow, Normal, and Fast.
-- Normal is the default replay speed.
-- Non-scripted mode means HF trace mode, and it accepts staff-entered prompts.
-- Scripted mode keeps the prompt locked to curated traces; reset and runtime switching restore the curated prompt view.
-- Generated HF traces are trimmed to the first complete sentence after at least eight generated steps.
-- Staff line: The model also receives a fixed instruction prompt to keep responses short and suitable for the demo. The bars show top returned token alternatives, not private reasoning.
-
-## Shutdown Notes
-
-The HF trace server suppresses Python's known `multiprocessing.resource_tracker` leaked semaphore warning on shutdown. Other HF trace startup, request, and generation errors should still be visible in the terminal.

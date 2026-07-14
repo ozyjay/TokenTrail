@@ -13,14 +13,11 @@ def test_required_project_files_exist() -> None:
         ".python-version",
         "README.md",
         "config/models.json",
-        "config/instructions/hf_trace_default.txt",
+        "config/instructions/modeldeck_default.txt",
         "scripts/setup.ps1",
         "scripts/clean.ps1",
         "scripts/test.ps1",
         "scripts/run.ps1",
-        "scripts/serve_hf_trace.ps1",
-        "scripts/benchmark_hf_trace.ps1",
-        "scripts/benchmark_hf_trace.py",
         "web/index.html",
     ]
 
@@ -55,7 +52,7 @@ def test_clean_script_removes_local_python_and_test_artifacts_only() -> None:
     assert "Get-ChildItem -Path $ProjectRoot" in script
 
 
-def test_run_script_manages_hf_trace_stack_when_configured() -> None:
+def test_run_script_starts_only_token_trail() -> None:
     powershell_script = (PROJECT_ROOT / "scripts/run.ps1").read_text(encoding="utf-8")
 
     assert "poetry install --with hf-trace" not in powershell_script
@@ -63,38 +60,13 @@ def test_run_script_manages_hf_trace_stack_when_configured() -> None:
     assert "poetry run python -m token_trail.local_runner" in powershell_script
 
 
-def test_hf_trace_probe_dependencies_are_core_poetry_dependencies() -> None:
+def test_legacy_hf_diagnostics_remain_available_without_driving_startup() -> None:
     pyproject = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert "hf-trace" not in pyproject["tool"]["poetry"].get("group", {})
-    assert {"torch", "transformers", "accelerate"}.issubset(set(pyproject["project"]["dependencies"]))
-
-
-def test_hf_trace_probe_powershell_script_uses_core_install_and_forwards_args() -> None:
-    script = (PROJECT_ROOT / "scripts/probe_hf_trace.ps1").read_text(encoding="utf-8")
-
-    assert "poetry install --with hf-trace" not in script
-    assert "poetry install" not in script
-    assert "$env:PYTHONPATH = \"src\"" in script
-    assert "poetry run python scripts/probe_hf_trace.py @args" in script
-
-
-def test_hf_trace_server_powershell_script_uses_core_install_and_forwards_args() -> None:
-    script = (PROJECT_ROOT / "scripts/serve_hf_trace.ps1").read_text(encoding="utf-8")
-
-    assert "poetry install --with hf-trace" not in script
-    assert "poetry install" not in script
-    assert "$env:PYTHONPATH = \"src\"" in script
-    assert "poetry run python scripts/serve_hf_trace.py @args" in script
-
-
-def test_hf_trace_benchmark_powershell_script_uses_core_install_and_forwards_args() -> None:
-    script = (PROJECT_ROOT / "scripts/benchmark_hf_trace.ps1").read_text(encoding="utf-8")
-
-    assert "poetry install --with hf-trace" not in script
-    assert "poetry install" not in script
-    assert "$env:PYTHONPATH = \"src\"" in script
-    assert "poetry run python scripts/benchmark_hf_trace.py @args" in script
+    assert {"torch", "transformers", "accelerate"}.issubset(pyproject["project"]["dependencies"])
+    runner = (PROJECT_ROOT / "src/token_trail/local_runner.py").read_text(encoding="utf-8")
+    assert "serve_hf_trace" not in runner
+    assert ".warmup(" not in runner
 
 
 def test_model_config_file_lists_runtime_models() -> None:
@@ -104,10 +76,13 @@ def test_model_config_file_lists_runtime_models() -> None:
     assert "vllm" not in model_config
     assert "ollama_model" not in model_config["defaults"]
     assert "vllm_model" not in model_config["defaults"]
-    assert model_config["defaults"]["hf_trace_model"] == "Qwen/Qwen2.5-1.5B-Instruct"
-    hf_trace_models = [entry["model"] for entry in model_config["hf_trace"]]
-    assert "Qwen/Qwen2.5-1.5B-Instruct" in hf_trace_models
-    assert "Qwen/Qwen2.5-0.5B-Instruct" in hf_trace_models
+    assert model_config["defaults"]["backend"] == "modeldeck"
+    assert model_config["defaults"]["modeldeck_model"] == "qwen-1-5b"
+    assert [entry["model"] for entry in model_config["modeldeck"]] == [
+        "qwen-0-5b",
+        "qwen-1-5b",
+        "qwen-3b",
+    ]
 
 
 def test_removed_backend_support_files_are_absent() -> None:

@@ -1,44 +1,20 @@
-# Staff Readiness Checklist
+# Staff readiness checklist
 
-## Before Visitors Arrive
+## Before opening
 
-1. Run the tests.
-2. Start Token Trail.
-3. Open `http://127.0.0.1:3100`.
-4. Confirm the runtime selector shows available HF trace models and scripted prepared traces.
-5. Confirm the trail speed selector offers Slow, Normal, and Fast.
-6. Confirm startup selected and warmed an available configured HF trace model.
-7. If switching HF trace models, confirm unavailable configured models are disabled and available models can warm before use.
-8. In HF trace mode, enter a short prompt and confirm the selected model produces a clean trace that replays to a complete sentence.
-9. Switch to scripted mode and confirm the prompt editor disappears.
-10. Press Reset and confirm the selected curated prompt and prepared trace are restored.
+1. Start ModelDeck separately and confirm its gateway is healthy.
+2. In the ModelDeck operator console, confirm the required Qwen workers are ready.
+3. Start Token Trail with `pwsh -NoProfile -File ./scripts/run.ps1`.
+4. Confirm the runtime selector shows `qwen-0-5b`, `qwen-1-5b`, `qwen-3b`, and scripted prepared traces.
+5. Confirm readiness in Token Trail matches ModelDeck; Token Trail must not start or warm a worker.
+6. Enter a short prompt with a ready alias and confirm the replay reaches a complete sentence.
+7. Confirm Reset restores the selected prepared trace and scripted mode hides the prompt editor.
+8. Stop one non-selected worker in ModelDeck and confirm its Token Trail runtime becomes unavailable.
+9. Confirm scripted mode still works when ModelDeck is unavailable.
 
-```powershell
-pwsh -NoProfile -File ./scripts/test.ps1
-pwsh -NoProfile -File ./scripts/run.ps1
-```
+## Go/no-go
 
-## Fallback Rule
+- GO: ModelDeck gateway healthy, required worker ready, one live trace completes, Reset works, and scripted fallback works.
+- NO-GO for live mode: gateway unreachable, worker unready, responses incomplete or unsuitable, or latency exceeds the event budget. Use scripted prepared traces.
 
-Normal operation is HF trace first when the server is healthy and the selected configured model has been warmed. If HF trace mode is slow, unavailable, not ready, unstable, unreadable, confusing, or returns an incomplete generation, use scripted prepared traces. The scripted fallback is mandatory for public reliability.
-
-Staff line: The model also receives a fixed instruction prompt to keep responses short and suitable for the demo. The bars show top returned token alternatives, not private reasoning.
-
-## Go/No-Go
-
-- GO: HF trace server healthy, selected configured model warmed, one clean trace completes, and Reset works.
-- FALLBACK: scripted prepared traces.
-- NO-GO for HF: model load or generation is slow, unstable, unreadable, confusing, or incomplete.
-
-Open Day rule: fewer reliable demos are better than fragile live features.
-
-## Shutdown Check
-
-When stopping the local stack with Ctrl+C, expect:
-
-```text
-Stopping Token Trail.
-Stopping HF trace server.
-```
-
-The known Python leaked semaphore shutdown warning from the HF/ML stack is filtered by the HF trace server script.
+Visitor prompts and generated responses must not be stored by default. Candidate bars are observable alternatives returned by the local model, not private reasoning.
