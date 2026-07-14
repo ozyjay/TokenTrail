@@ -39,6 +39,13 @@ def test_run_scripts_delegate_host_and_port_config_to_python() -> None:
     assert "TOKEN_TRAIL_PORT" not in powershell_script
 
 
+def test_setup_script_explains_how_to_install_missing_poetry() -> None:
+    setup_script = (PROJECT_ROOT / "scripts/setup.ps1").read_text(encoding="utf-8")
+
+    assert "Get-Command poetry" in setup_script
+    assert "pipx install poetry" in setup_script
+
+
 def test_clean_script_removes_local_python_and_test_artifacts_only() -> None:
     script = (PROJECT_ROOT / "scripts" / "clean.ps1").read_text(encoding="utf-8")
 

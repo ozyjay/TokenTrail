@@ -13,10 +13,17 @@ The configured aliases are `qwen-0-5b`, `qwen-1-5b`, and `qwen-3b`. ModelDeck ow
 
 ## Setup and run
 
+Poetry is required. Install it once with `pipx`, then restart PowerShell so the updated `PATH` is loaded:
+
+```powershell
+pipx install poetry
+poetry --version
+```
+
 Install Token Trail's Python environment:
 
 ```powershell
-poetry install
+pwsh -NoProfile -File ./scripts/setup.ps1
 ```
 
 Start ModelDeck separately and make the required Qwen workers ready using its operator console or management API. Then start this demo:
