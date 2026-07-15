@@ -21,7 +21,9 @@ def test_web_app_keeps_selected_trace_separate_from_live_replay_trace() -> None:
     assert "currentTrace = selectedTrace;" in app_js
     assert "resetDemo({ restoreSelectedTrace: true })" in app_js
     assert "currentTrace = payload.trace || selectedTrace || currentTrace;" in app_js
-    assert "resetButton.addEventListener(\"click\", () => resetDemo({ restoreSelectedTrace: true }));" in app_js
+    reset_handler = app_js.split('resetButton.addEventListener("click"', 1)[1].split("Promise.all", 1)[0]
+    assert "resetDemo({ restoreSelectedTrace: true });" in reset_handler
+    assert "resetPromptToTrace();" in reset_handler
 
 
 def test_reset_demo_rerenders_prompt_for_current_runtime() -> None:
@@ -128,6 +130,59 @@ def test_web_app_has_trail_speed_control() -> None:
     assert '<option value="slow">Slow</option>' in index_html
     assert '<option value="normal" selected>Normal</option>' in index_html
     assert '<option value="fast">Fast</option>' in index_html
+
+
+def test_web_app_has_accessible_generation_position_slider() -> None:
+    index_html = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+
+    assert 'for="generationPosition"' in index_html
+    assert 'id="generationPosition"' in index_html
+    assert 'type="range"' in index_html
+    assert 'min="0" max="0" value="0" step="1" disabled' in index_html
+    assert 'id="generationPositionOutput"' in index_html
+    assert 'aria-live="polite"' in index_html
+    assert "0 / 0 tokens" in index_html
+
+
+def test_web_app_centralises_autoplay_and_scrub_position_rendering() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    render_body = app_js.split("function renderGenerationPosition", 1)[1].split("function updateReplayNavigator", 1)[0]
+    run_step_body = app_js.split("function runStep", 1)[1].split("async function generateTrace", 1)[0]
+    scrub_body = app_js.split('generationPosition.addEventListener("input"', 1)[1].split(
+        'trailSpeedSelect.addEventListener', 1
+    )[0]
+
+    assert "currentTrace.steps.slice(0, stepIndex)" in render_body
+    assert "currentTrace.steps[stepIndex - 1]" in render_body
+    assert "candidateList.replaceChildren();" in render_body
+    assert "renderGenerationPosition(stepIndex + 1);" in run_step_body
+    assert "timer = null;" in scrub_body
+    assert "renderGenerationPosition(Number(generationPosition.value));" in scrub_body
+
+
+def test_web_app_enables_slider_only_after_start_and_resumes_existing_trace() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    navigator_body = app_js.split("function updateReplayNavigator", 1)[1].split("function stopPlayback", 1)[0]
+    start_demo_body = app_js.split("async function startDemo", 1)[1].split("function startPreparedTrail", 1)[0]
+
+    assert "generationPosition.disabled = !trailStarted || totalSteps === 0;" in navigator_body
+    assert "generationPositionOutput.value" in navigator_body
+    assert "if (trailStarted && currentTrace)" in start_demo_body
+    assert start_demo_body.index("if (trailStarted && currentTrace)") < start_demo_body.index("await generateTrace()")
+    assert 'return stepIndex >= currentTrace.steps.length ? "Replay trail" : "Continue trail";' in app_js
+
+
+def test_web_app_invalidates_replay_on_reset_and_prompt_edit() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    reset_body = app_js.split("function resetDemo", 1)[1].split("function buttonLabelForRuntime", 1)[0]
+    prompt_input_body = app_js.split('promptInput.addEventListener("input"', 1)[1].split('generationPosition.addEventListener', 1)[0]
+
+    assert "trailStarted = false;" in reset_body
+    assert "updateReplayNavigator();" in reset_body
+    assert "resetDemo({ restoreSelectedTrace: true });" in prompt_input_body
 
 
 def test_web_app_uses_speed_presets_and_timeout_replay_loop() -> None:

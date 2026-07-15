@@ -232,6 +232,42 @@ button:disabled {
   font-weight: 900;
 }
 
+.replay-navigator {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: auto;
+  padding-top: 1.25rem;
+}
+
+.replay-navigator-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #d7defc;
+}
+
+.replay-navigator output {
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.generation-position {
+  width: 100%;
+  min-height: 2rem;
+  cursor: ew-resize;
+  accent-color: #ffcd70;
+}
+
+.generation-position:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.generation-position:focus-visible {
+  outline: 3px solid rgba(128, 210, 255, 0.7);
+  outline-offset: 0.25rem;
+}
+
 .explanation {
   margin-top: 1rem;
   color: #d7defc;
@@ -256,5 +292,11 @@ button:disabled {
   .candidate {
     grid-template-columns: minmax(0, 1fr) minmax(5rem, 1fr) 3.5rem;
     font-size: 1.1rem;
+  }
+
+  .replay-navigator-labels {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.35rem;
   }
 }

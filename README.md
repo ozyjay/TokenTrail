@@ -55,6 +55,7 @@ For live traces, Token Trail displays ModelDeck's decoded tokens for the staff-e
 ## Behaviour and privacy
 
 - Live output is trimmed to the first complete sentence after at least eight generated steps.
+- Once a trail starts, visitors can pause and scrub backwards or forwards through its generated tokens.
 - Candidate bars are top returned alternatives from the local model, not private reasoning.
 - A failed, slow, malformed, or incomplete live trace falls back to the selected prepared trace.
 - Visitor prompts and generated responses are not stored by default.

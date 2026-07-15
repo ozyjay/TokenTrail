@@ -8,6 +8,8 @@ const promptInput = document.querySelector("#promptInput");
 const promptTokens = document.querySelector("#promptTokens");
 const candidateList = document.querySelector("#candidateList");
 const generatedText = document.querySelector("#generatedText");
+const generationPosition = document.querySelector("#generationPosition");
+const generationPositionOutput = document.querySelector("#generationPositionOutput");
 const explanation = document.querySelector("#explanation");
 
 let currentTrace = null;
@@ -16,6 +18,7 @@ let currentRuntime = null;
 let timer = null;
 let generatedTokens = [];
 let stepIndex = 0;
+let trailStarted = false;
 let runNotice = "";
 let runtimeRequestId = 0;
 let runtimePollTimer = null;
@@ -107,6 +110,7 @@ function runtimeStatusLabel(option) {
 function updatePlayButton() {
   runtimeSelect.disabled = Boolean(timer);
   if (timer) {
+    playButton.textContent = "Running...";
     return;
   }
   playButton.textContent = buttonLabelForRuntime();
@@ -265,22 +269,57 @@ function trailDelayMs() {
 function scheduleNextStep() {
   clearTimeout(timer);
   timer = setTimeout(runStep, trailDelayMs());
+  updatePlayButton();
+}
+
+function renderGenerationPosition(position) {
+  if (!currentTrace) {
+    return;
+  }
+
+  const boundedPosition = Math.max(0, Math.min(Number(position), currentTrace.steps.length));
+  stepIndex = boundedPosition;
+  generatedTokens = currentTrace.steps.slice(0, stepIndex).map((step) => step.selected_token);
+  generatedText.textContent = joinDisplayTokens(generatedTokens, currentTrace.mode === "modeldeck-live-trace");
+
+  if (stepIndex === 0) {
+    candidateList.replaceChildren();
+    explanation.textContent = runNotice || "At the start of the trail.";
+    updateReplayNavigator();
+    return;
+  }
+
+  const step = currentTrace.steps[stepIndex - 1];
+  renderCandidates(step);
+  explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
+  updateReplayNavigator();
+}
+
+function updateReplayNavigator() {
+  const totalSteps = currentTrace ? currentTrace.steps.length : 0;
+  generationPosition.max = String(totalSteps);
+  generationPosition.value = String(Math.min(stepIndex, totalSteps));
+  generationPosition.disabled = !trailStarted || totalSteps === 0;
+  generationPositionOutput.value = `${Math.min(stepIndex, totalSteps)} / ${totalSteps} tokens`;
+}
+
+function stopPlayback() {
+  clearTimeout(timer);
+  timer = null;
+  updatePlayButton();
 }
 
 function runStep() {
   if (!currentTrace || stepIndex >= currentTrace.steps.length) {
-    playButton.textContent = "Replay trail";
-    clearTimeout(timer);
-    timer = null;
+    stopPlayback();
     return;
   }
 
-  const step = currentTrace.steps[stepIndex];
-  renderCandidates(step);
-  generatedTokens.push(step.selected_token);
-  generatedText.textContent = joinDisplayTokens(generatedTokens, currentTrace.mode === "modeldeck-live-trace");
-  explanation.textContent = runNotice ? `${runNotice}. ${step.explanation}` : step.explanation;
-  stepIndex += 1;
+  renderGenerationPosition(stepIndex + 1);
+  if (stepIndex >= currentTrace.steps.length) {
+    stopPlayback();
+    return;
+  }
   scheduleNextStep();
 }
 
@@ -339,6 +378,10 @@ async function startDemo() {
     explanation.textContent = `Loading ${currentRuntime.model}...`;
     return;
   }
+  if (trailStarted && currentTrace) {
+    startPreparedTrail();
+    return;
+  }
 
   if (currentRuntime && currentRuntime.backend !== "scripted") {
     playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
@@ -363,10 +406,11 @@ async function startDemo() {
 
 function startPreparedTrail() {
   if (stepIndex >= currentTrace.steps.length) {
-    resetDemo();
+    renderGenerationPosition(0);
   }
 
-  playButton.textContent = "Running...";
+  trailStarted = true;
+  updateReplayNavigator();
   runStep();
 }
 
@@ -378,15 +422,20 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
   }
   generatedTokens = [];
   stepIndex = 0;
+  trailStarted = false;
   runNotice = "";
   candidateList.replaceChildren();
   generatedText.textContent = "";
   explanation.textContent = "Press start to see candidate tokens appear step by step.";
+  updateReplayNavigator();
   renderPrompt();
   updatePlayButton();
 }
 
 function buttonLabelForRuntime() {
+  if (trailStarted && currentTrace) {
+    return stepIndex >= currentTrace.steps.length ? "Replay trail" : "Continue trail";
+  }
   if (!currentRuntime || currentRuntime.backend === "scripted") {
     return "Start trail";
   }
@@ -404,8 +453,20 @@ runtimeSelect.addEventListener("change", () => {
 });
 promptInput.addEventListener("input", () => {
   if (canEditPrompt()) {
+    if (trailStarted) {
+      resetDemo({ restoreSelectedTrace: true });
+    }
     renderTokens(promptTokens, simpleTokenise(promptInput.value));
   }
+});
+generationPosition.addEventListener("input", () => {
+  if (!trailStarted) {
+    return;
+  }
+  clearTimeout(timer);
+  timer = null;
+  renderGenerationPosition(Number(generationPosition.value));
+  updatePlayButton();
 });
 trailSpeedSelect.addEventListener("change", () => {
   if (timer) {
@@ -413,7 +474,10 @@ trailSpeedSelect.addEventListener("change", () => {
   }
 });
 playButton.addEventListener("click", startDemo);
-resetButton.addEventListener("click", () => resetDemo({ restoreSelectedTrace: true }));
+resetButton.addEventListener("click", () => {
+  resetDemo({ restoreSelectedTrace: true });
+  resetPromptToTrace();
+});
 
 Promise.all([loadRuntimeOptions(), loadTraceList()]).catch((error) => {
   explanation.textContent = `Could not load demo data: ${error}`;

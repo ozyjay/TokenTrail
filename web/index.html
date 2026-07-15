@@ -48,6 +48,13 @@
       <article class="panel generated-panel">
         <h2>3. Generated text</h2>
         <p id="generatedText" class="generated-text"></p>
+        <div class="replay-navigator">
+          <div class="replay-navigator-labels">
+            <label for="generationPosition">Generation position</label>
+            <output id="generationPositionOutput" for="generationPosition" aria-live="polite">0 / 0 tokens</output>
+          </div>
+          <input id="generationPosition" class="generation-position" type="range" min="0" max="0" value="0" step="1" disabled>
+        </div>
         <p id="explanation" class="explanation">Choose a prompt and start the trail.</p>
       </article>
     </section>
