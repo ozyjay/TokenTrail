@@ -178,6 +178,11 @@ function renderTokens(container, tokens) {
   );
 }
 
+function promptTokensForDisplay(trace) {
+  const tokens = trace.user_prompt_tokens || trace.prompt_tokens || [];
+  return tokens.filter((token) => token.trim() !== "");
+}
+
 function simpleTokenise(text) {
   return text.replaceAll(".", " .").replaceAll(",", " ,").replaceAll(":", " :").split(/\s+/).filter(Boolean);
 }
@@ -205,7 +210,7 @@ function renderPrompt() {
   if (canEditPrompt()) {
     promptText.hidden = true;
     promptInput.hidden = false;
-    const visibleTokens = promptInput.value === trace.prompt ? trace.prompt_tokens : simpleTokenise(promptInput.value);
+    const visibleTokens = promptInput.value === trace.prompt ? promptTokensForDisplay(trace) : simpleTokenise(promptInput.value);
     renderTokens(promptTokens, visibleTokens);
     return;
   }
@@ -213,7 +218,7 @@ function renderPrompt() {
   promptInput.hidden = true;
   promptText.hidden = false;
   promptText.textContent = trace.prompt;
-  renderTokens(promptTokens, trace.prompt_tokens);
+  renderTokens(promptTokens, promptTokensForDisplay(trace));
 }
 
 function renderCandidates(step) {

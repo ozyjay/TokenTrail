@@ -36,7 +36,7 @@ def model_list(*, ready: bool = True) -> dict:
     }
 
 
-def native_trace(*, complete: bool = True) -> dict:
+def native_trace(*, complete: bool = True, include_user_prompt_tokens: bool = True) -> dict:
     events = []
     text = ""
     for index, token in enumerate(("Token", " Trail", " shows", " how", " local", " models", " choose", " words.")):
@@ -52,7 +52,16 @@ def native_trace(*, complete: bool = True) -> dict:
                 "text_so_far": text.rstrip(".") if index == 7 and not complete else text,
             }
         )
-    return {"request_id": "request-1", "model": "qwen-1-5b", "prompt_token_ids": [10, 20], "events": events}
+    payload = {
+        "request_id": "request-1",
+        "model": "qwen-1-5b",
+        "prompt_token_ids": [10, 20],
+        "prompt_tokens": ["system", "\n"],
+        "events": events,
+    }
+    if include_user_prompt_tokens:
+        payload["user_prompt_tokens"] = ["Explain", " ", "token", " prediction", "."]
+    return payload
 
 
 def test_models_uses_modeldeck_gateway_contract() -> None:
@@ -106,12 +115,33 @@ def test_generate_trace_sends_messages_and_converts_native_events() -> None:
     assert timeout == 20.0
     assert trace["mode"] == "modeldeck-live-trace"
     assert trace["prompt"] == "Explain token prediction."
-    assert trace["prompt_tokens"] == ["<10>", "<20>"]
+    assert trace["prompt_tokens"] == ["system", "\n"]
+    assert trace["user_prompt_tokens"] == ["Explain", " ", "token", " prediction", "."]
     assert trace["steps"][-1]["selected_token"] == " words."
     assert trace["steps"][0]["candidates"] == [
         {"token": "Token", "probability": 0.7},
         {"token": " other", "probability": 0.2},
     ]
+
+
+def test_generate_trace_supports_modeldeck_without_user_prompt_tokens() -> None:
+    adapter = ModelDeckAdapter(
+        "http://127.0.0.1:8600",
+        opener=lambda request, timeout: FakeResponse(native_trace(include_user_prompt_tokens=False)),
+    )
+
+    trace = adapter.generate_trace(
+        prompt="Explain token prediction.",
+        instructions="Use one sentence.",
+        model="qwen-1-5b",
+        max_new_tokens=96,
+        top_k=5,
+        temperature=0.3,
+        timeout_seconds=20,
+    )
+
+    assert "user_prompt_tokens" not in trace
+    assert trace["prompt_tokens"] == ["system", "\n"]
 
 
 def test_generate_trace_rejects_incomplete_sentence() -> None:

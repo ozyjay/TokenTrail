@@ -130,17 +130,28 @@ def _convert_trace(payload: Any, *, prompt: str, model: str) -> dict:
         prompt_token_ids = payload.get("prompt_token_ids", [])
         if not isinstance(prompt_token_ids, list) or not all(isinstance(token_id, int) for token_id in prompt_token_ids):
             raise AdapterError("ModelDeck trace is missing prompt token data")
-        # Protocol v1 exposes token IDs, which are the lossless model-tokenised representation.
+        # Older protocol responses expose only the lossless model-tokenised IDs.
         prompt_tokens = [f"<{token_id}>" for token_id in prompt_token_ids]
 
+    user_prompt_tokens = payload.get("user_prompt_tokens")
+    if user_prompt_tokens is not None and (
+        not isinstance(user_prompt_tokens, list)
+        or not user_prompt_tokens
+        or not all(isinstance(token, str) for token in user_prompt_tokens)
+    ):
+        raise AdapterError("ModelDeck trace contains invalid user prompt tokens")
+
     steps = [_convert_event(event) for event in events[: complete_index + 1]]
-    return {
+    trace = {
         "mode": "modeldeck-live-trace",
         "model": model,
         "prompt": prompt,
         "prompt_tokens": prompt_tokens,
         "steps": steps,
     }
+    if user_prompt_tokens is not None:
+        trace["user_prompt_tokens"] = user_prompt_tokens
+    return trace
 
 
 def _convert_event(event: Any) -> dict:
@@ -182,6 +193,13 @@ def validate_trace_payload(trace: Any) -> None:
     prompt_tokens = trace.get("prompt_tokens")
     if not isinstance(prompt_tokens, list) or not prompt_tokens or not all(isinstance(token, str) for token in prompt_tokens):
         raise AdapterError("ModelDeck trace payload has invalid prompt tokens")
+    user_prompt_tokens = trace.get("user_prompt_tokens")
+    if user_prompt_tokens is not None and (
+        not isinstance(user_prompt_tokens, list)
+        or not user_prompt_tokens
+        or not all(isinstance(token, str) for token in user_prompt_tokens)
+    ):
+        raise AdapterError("ModelDeck trace payload has invalid user prompt tokens")
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
         raise AdapterError("ModelDeck trace payload has no replay steps")

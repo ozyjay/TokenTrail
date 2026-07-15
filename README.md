@@ -50,7 +50,7 @@ TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE=config/instructions/modeldeck_default.tx
 
 The fixed hidden instruction keeps public responses short and suitable for the demo. Token Trail sends it as a system message while retaining the staff-entered prompt as the visible prompt.
 
-ModelDeck protocol v1 returns prompt token IDs rather than decoded prompt-token strings. Token Trail displays those IDs in angle brackets after generation; generated tokens and candidate bars use the exact decoded tokens and probabilities returned by the worker.
+For live traces, Token Trail displays ModelDeck's decoded tokens for the staff-entered prompt and omits whitespace-only token chips. Complete prompt tokens, including hidden instructions and chat-template markers, are retained in the trace payload but are not shown in the public prompt view. Older ModelDeck responses containing only prompt token IDs remain supported and are displayed in angle brackets as a diagnostic fallback.
 
 ## Behaviour and privacy
 

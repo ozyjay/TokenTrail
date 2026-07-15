@@ -36,8 +36,17 @@ def test_web_app_prefers_active_trace_tokens_for_prompt_display() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
     assert "const trace = currentTrace || selectedTrace;" in app_js
-    assert "promptInput.value === trace.prompt ? trace.prompt_tokens : simpleTokenise(promptInput.value)" in app_js
-    assert "renderTokens(promptTokens, trace.prompt_tokens);" in app_js
+    assert "promptInput.value === trace.prompt ? promptTokensForDisplay(trace) : simpleTokenise(promptInput.value)" in app_js
+    assert "renderTokens(promptTokens, promptTokensForDisplay(trace));" in app_js
+
+
+def test_web_app_prefers_user_prompt_tokens_and_hides_whitespace_only_chips() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    helper_body = app_js.split("function promptTokensForDisplay", 1)[1].split("function simpleTokenise", 1)[0]
+
+    assert "trace.user_prompt_tokens || trace.prompt_tokens || []" in helper_body
+    assert 'tokens.filter((token) => token.trim() !== "")' in helper_body
 
 
 def test_web_app_preserves_modeldeck_decoded_token_spacing() -> None:
