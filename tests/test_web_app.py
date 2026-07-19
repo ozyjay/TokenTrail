@@ -20,7 +20,7 @@ def test_web_app_keeps_selected_trace_separate_from_live_replay_trace() -> None:
     assert "selectedTrace = await response.json();" in app_js
     assert "currentTrace = selectedTrace;" in app_js
     assert "resetDemo({ restoreSelectedTrace: true })" in app_js
-    assert "currentTrace = payload.trace || selectedTrace || currentTrace;" in app_js
+    assert "currentTrace = payload.trace;" in app_js
     reset_handler = app_js.split('resetButton.addEventListener("click"', 1)[1].split("Promise.all", 1)[0]
     assert "resetDemo({ restoreSelectedTrace: true });" in reset_handler
     assert "resetPromptToTrace();" in reset_handler
@@ -47,8 +47,17 @@ def test_web_app_prefers_user_prompt_tokens_and_hides_whitespace_only_chips() ->
 
     helper_body = app_js.split("function promptTokensForDisplay", 1)[1].split("function simpleTokenise", 1)[0]
 
-    assert "trace.user_prompt_tokens || trace.prompt_tokens || []" in helper_body
+    assert 'trace.mode === "modeldeck-live-trace" ? trace.user_prompt_tokens || []' in helper_body
     assert 'tokens.filter((token) => token.trim() !== "")' in helper_body
+
+
+def test_web_app_cancels_active_modeldeck_request_through_local_api() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "new AbortController()" in app_js
+    assert 'fetch("/api/generate-trace/cancel"' in app_js
+    assert "activeGenerationController?.abort();" in app_js
+    assert 'runNotice = "Trace request cancelled";' in app_js
 
 
 def test_web_app_preserves_modeldeck_decoded_token_spacing() -> None:
@@ -61,13 +70,13 @@ def test_web_app_preserves_modeldeck_decoded_token_spacing() -> None:
     assert 'currentTrace.mode === "modeldeck-live-trace"' in app_js
 
 
-def test_web_app_does_not_replace_custom_prompt_on_live_fallback() -> None:
+def test_web_app_does_not_substitute_prepared_trace_for_live_failure() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    fallback_body = app_js.split("function loadFallbackTrace", 1)[1].split("async function startDemo", 1)[0]
+    unavailable_body = app_js.split("function showLiveUnavailable", 1)[1].split("async function startDemo", 1)[0]
 
-    assert "resetPromptToTrace();" not in fallback_body
-    assert "renderPrompt();" in fallback_body
-    assert 'payload.message || "Live generation unavailable — showing prepared trace"' in fallback_body
+    assert "startPreparedTrail();" not in unavailable_body
+    assert 'payload.message || "Live ModelDeck trace unavailable"' in unavailable_body
+    assert "no prepared output was substituted" in app_js
 
 
 def test_web_app_allows_prompt_editing_for_available_modeldeck_runtimes() -> None:
@@ -118,8 +127,9 @@ def test_web_app_disables_generation_while_selected_model_loads() -> None:
 
     assert "isSelectedRuntimeLoading()" in app_js
     assert 'return "Loading model...";' in app_js
-    assert "playButton.disabled = isSelectedRuntimeLoading();" in app_js
-    assert "runtimeSelect.disabled = Boolean(timer);" in app_js
+    assert "isLiveRuntimeUnavailable()" in app_js
+    assert "isSelectedRuntimeLoading() || generationInProgress || isLiveRuntimeUnavailable()" in app_js
+    assert "runtimeSelect.disabled = Boolean(timer) || generationInProgress;" in app_js
 
 
 def test_web_app_has_trail_speed_control() -> None:

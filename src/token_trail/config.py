@@ -16,6 +16,8 @@ DEFAULT_TOKEN_TRAIL_PORT = 3100
 DEFAULT_TOKEN_TRAIL_BACKEND_PORT = 8100
 DEFAULT_MODELDECK_URL = "http://127.0.0.1:8600"
 DEFAULT_MODELDECK_MODEL = "qwen-1-5b"
+DEFAULT_MODELDECK_MODELS = ("qwen-0-5b", "qwen-1-5b", "qwen-3b")
+DEFAULT_MODELDECK_MAX_NEW_TOKENS = 64
 DEFAULT_HF_TRACE_URL = "http://127.0.0.1:8600/api/trace"
 DEFAULT_HF_TRACE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 DEFAULT_HF_TRACE_TOP_K = 5
@@ -52,9 +54,9 @@ class RuntimeConfig:
     modeldeck_enabled: bool = False
     modeldeck_url: str = DEFAULT_MODELDECK_URL
     modeldeck_model: str = DEFAULT_MODELDECK_MODEL
-    modeldeck_models: tuple[str, ...] = ()
+    modeldeck_models: tuple[str, ...] = DEFAULT_MODELDECK_MODELS
     modeldeck_top_k: int = DEFAULT_HF_TRACE_TOP_K
-    modeldeck_max_new_tokens: int = DEFAULT_HF_TRACE_MAX_NEW_TOKENS
+    modeldeck_max_new_tokens: int = DEFAULT_MODELDECK_MAX_NEW_TOKENS
     modeldeck_temperature: float = DEFAULT_HF_TRACE_TEMPERATURE
     modeldeck_timeout_seconds: float = DEFAULT_HF_TRACE_TIMEOUT_SECONDS
     modeldeck_instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS
@@ -70,9 +72,7 @@ class RuntimeConfig:
     hf_trace_instructions: str = DEFAULT_HF_TRACE_INSTRUCTIONS
 
     def __post_init__(self) -> None:
-        if not self.modeldeck_models:
-            object.__setattr__(self, "modeldeck_models", (self.modeldeck_model,))
-        elif self.modeldeck_model not in self.modeldeck_models:
+        if self.modeldeck_model not in self.modeldeck_models:
             object.__setattr__(self, "modeldeck_models", (self.modeldeck_model, *self.modeldeck_models))
         if not self.hf_trace_models:
             object.__setattr__(self, "hf_trace_models", (self.hf_trace_model,))
@@ -97,11 +97,11 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         return default
 
     modeldeck_model = get_setting(
-        "TOKEN_TRAIL_MODELDECK_MODEL",
+        "TOKEN_TRAILS_MODEL",
         DEFAULT_MODELDECK_MODEL,
-        _model_config_default(model_config, "modeldeck_model"),
+        _model_config_default(model_config, "model"),
     )
-    modeldeck_models = _model_config_models(model_config, "modeldeck") or (modeldeck_model,)
+    modeldeck_models = _model_config_models(model_config, "modeldeck") or DEFAULT_MODELDECK_MODELS
     modeldeck_instructions_file = get_setting(
         "TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE",
         str(DEFAULT_MODELDECK_INSTRUCTIONS_PATH),
@@ -133,7 +133,7 @@ def load_config(env_file: Path | None = DEFAULT_ENV_FILE) -> RuntimeConfig:
         ),
         modeldeck_top_k=int(get_setting("TOKEN_TRAIL_MODELDECK_TOP_K", str(DEFAULT_HF_TRACE_TOP_K))),
         modeldeck_max_new_tokens=int(
-            get_setting("TOKEN_TRAIL_MODELDECK_MAX_NEW_TOKENS", str(DEFAULT_HF_TRACE_MAX_NEW_TOKENS))
+            get_setting("TOKEN_TRAIL_MODELDECK_MAX_NEW_TOKENS", str(DEFAULT_MODELDECK_MAX_NEW_TOKENS))
         ),
         modeldeck_temperature=float(
             get_setting("TOKEN_TRAIL_MODELDECK_TEMPERATURE", str(DEFAULT_HF_TRACE_TEMPERATURE))

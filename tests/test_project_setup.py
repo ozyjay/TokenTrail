@@ -76,7 +76,7 @@ def test_legacy_hf_diagnostics_remain_available_without_driving_startup() -> Non
     assert ".warmup(" not in runner
 
 
-def test_model_config_file_lists_runtime_models() -> None:
+def test_model_config_file_uses_public_modeldeck_route() -> None:
     model_config = json.loads((PROJECT_ROOT / "config" / "models.json").read_text(encoding="utf-8"))
 
     assert "ollama" not in model_config
@@ -84,12 +84,23 @@ def test_model_config_file_lists_runtime_models() -> None:
     assert "ollama_model" not in model_config["defaults"]
     assert "vllm_model" not in model_config["defaults"]
     assert model_config["defaults"]["backend"] == "modeldeck"
-    assert model_config["defaults"]["modeldeck_model"] == "qwen-1-5b"
+    assert model_config["defaults"]["model"] == "qwen-1-5b"
     assert [entry["model"] for entry in model_config["modeldeck"]] == [
         "qwen-0-5b",
         "qwen-1-5b",
         "qwen-3b",
     ]
+
+
+def test_application_config_has_no_modeldeck_deployment_ids_or_worker_ports() -> None:
+    config_text = "\n".join(
+        (PROJECT_ROOT / path).read_text(encoding="utf-8")
+        for path in (".env.example", "config/models.json", "src/token_trail/config.py")
+    )
+
+    assert "qwen-small-rocm" not in config_text
+    for worker_port in ("8620", "8623", "8624"):
+        assert worker_port not in config_text
 
 
 def test_removed_backend_support_files_are_absent() -> None:

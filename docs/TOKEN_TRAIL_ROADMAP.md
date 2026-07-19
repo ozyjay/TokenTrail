@@ -5,9 +5,9 @@
 Token Trail has two runtime families:
 
 - ModelDeck live token traces as the primary backend;
-- scripted prepared traces as the mandatory fallback and secondary prepared mode.
+- an explicit prepared replay mode for deterministic fallback.
 
-ModelDeck is the default live token-trace service for staff-entered prompts, generated token candidates, and replayable probability bars. ModelDeck owns the Qwen workers and Token Trail only consumes ready aliases through its stable gateway. Scripted prepared traces remain the guaranteed public-demo fallback when ModelDeck is slow, unavailable, not ready, or confusing.
+ModelDeck is the default live token-trace service for staff-entered prompts, generated token candidates and replayable probability bars. ModelDeck owns route configuration and runtime lifecycle; Token Trail consumes only configured public aliases through the stable gateway. Prepared replay remains available as an explicit operator choice when live mode is unavailable or unsuitable.
 
 ## Near-Term Polish
 

@@ -31,7 +31,7 @@ def clear_token_trail_env(monkeypatch) -> None:
         "TOKEN_TRAIL_MODEL_CONFIG_PATH",
         "TOKEN_TRAIL_MODELDECK_ENABLED",
         "TOKEN_TRAIL_MODELDECK_URL",
-        "TOKEN_TRAIL_MODELDECK_MODEL",
+        "TOKEN_TRAILS_MODEL",
         "TOKEN_TRAIL_MODELDECK_MODELS",
         "TOKEN_TRAIL_MODELDECK_TOP_K",
         "TOKEN_TRAIL_MODELDECK_MAX_NEW_TOKENS",
@@ -61,6 +61,10 @@ def test_default_config_uses_scripted_local_mode(monkeypatch) -> None:
     assert config.hf_trace_timeout_seconds == 20.0
     assert config.hf_trace_warmup_timeout_seconds == 180.0
     assert config.hf_trace_instructions == DEFAULT_HF_TRACE_INSTRUCTIONS
+    assert config.modeldeck_url == "http://127.0.0.1:8600"
+    assert config.modeldeck_model == "qwen-1-5b"
+    assert config.modeldeck_models == ("qwen-0-5b", "qwen-1-5b", "qwen-3b")
+    assert config.modeldeck_max_new_tokens == 64
 
 
 def test_config_reads_environment_overrides(monkeypatch) -> None:
@@ -102,8 +106,8 @@ def test_config_reads_modeldeck_environment_overrides(monkeypatch) -> None:
     monkeypatch.setenv("TOKEN_TRAIL_BACKEND", "modeldeck")
     monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_ENABLED", "true")
     monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_URL", "http://127.0.0.1:9600/")
-    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_MODEL", "qwen-3b")
-    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_MODELS", "qwen-0-5b,qwen-1-5b,qwen-3b")
+    monkeypatch.setenv("TOKEN_TRAILS_MODEL", "custom-token-route")
+    monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_MODELS", "qwen-0-5b,custom-token-route,qwen-3b")
     monkeypatch.setenv("TOKEN_TRAIL_MODELDECK_TIMEOUT_SECONDS", "8.5")
 
     config = load_config(env_file=None)
@@ -111,8 +115,8 @@ def test_config_reads_modeldeck_environment_overrides(monkeypatch) -> None:
     assert config.backend == "modeldeck"
     assert config.modeldeck_enabled is True
     assert config.modeldeck_url == "http://127.0.0.1:9600"
-    assert config.modeldeck_model == "qwen-3b"
-    assert config.modeldeck_models == ("qwen-0-5b", "qwen-1-5b", "qwen-3b")
+    assert config.modeldeck_model == "custom-token-route"
+    assert config.modeldeck_models == ("qwen-0-5b", "custom-token-route", "qwen-3b")
     assert config.modeldeck_timeout_seconds == 8.5
 
 

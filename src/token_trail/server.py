@@ -5,13 +5,19 @@ from __future__ import annotations
 import argparse
 import json
 import mimetypes
+import re
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
 from token_trail.adapters.base import AdapterError
-from token_trail.adapters.modeldeck import ModelDeckAdapter, ModelDeckStatus, validate_trace_payload
+from token_trail.adapters.modeldeck import (
+    ModelDeckAdapter,
+    ModelDeckError,
+    ModelDeckStatus,
+    validate_trace_payload,
+)
 from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config
 from token_trail.runtime import RuntimeOption, RuntimeState, build_runtime_options, default_runtime_id, select_runtime
 from token_trail.traces import get_trace, list_traces
@@ -20,6 +26,7 @@ from token_trail.traces import get_trace, list_traces
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "web"
 MODELDECK_DISCOVERY_TIMEOUT_SECONDS = 2.0
+REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 
 @dataclass
@@ -49,7 +56,10 @@ def build_server_state(
 
     trace_adapter = modeldeck_adapter or ModelDeckAdapter(config.modeldeck_url)
     statuses = _modeldeck_statuses(config, trace_adapter)
-    modeldeck_status = statuses.get(config.modeldeck_model, ModelDeckStatus(available=False))
+    modeldeck_status = statuses.get(
+        config.modeldeck_model,
+        ModelDeckStatus(available=False, state="gateway_unavailable"),
+    )
     runtime_options = build_runtime_options(config, modeldeck_statuses=_runtime_status_payload(statuses))
     runtime_state = RuntimeState(selected_id=default_runtime_id(config, runtime_options))
     return ServerState(
@@ -107,6 +117,10 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             self._generate_trace()
             return
 
+        if self.path == "/api/generate-trace/cancel":
+            self._cancel_trace()
+            return
+
         self._send_json({"message": "Route not found"}, status=404)
 
     def log_message(self, format: str, *args: object) -> None:
@@ -161,6 +175,11 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
 
         if runtime.backend == "modeldeck" and runtime.available and runtime.model:
             try:
+                request_id = _request_id_from_payload(payload)
+            except ValueError as error:
+                self._send_json({"error": str(error), "code": "invalid_request_id"}, status=400)
+                return
+            try:
                 modeldeck_trace = state.modeldeck_adapter.generate_trace(
                     prompt=live_prompt,
                     instructions=state.config.modeldeck_instructions,
@@ -169,10 +188,28 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                     top_k=state.config.modeldeck_top_k,
                     temperature=state.config.modeldeck_temperature,
                     timeout_seconds=state.config.modeldeck_timeout_seconds,
+                    request_id=request_id,
                 )
                 validate_trace_payload(modeldeck_trace)
+            except ModelDeckError as error:
+                self._send_json(
+                    _live_error_payload(
+                        runtime_id,
+                        state=_request_error_state(error.code),
+                        code=error.code,
+                    ),
+                    status=error.http_status or _live_error_status(error.code),
+                )
+                return
             except AdapterError as error:
-                self._send_json(_scripted_fallback_payload(runtime_id, trace, reason=str(error)))
+                self._send_json(
+                    _live_error_payload(
+                        runtime_id,
+                        state="invalid_worker_trace_metadata",
+                        code="invalid_worker_trace_metadata",
+                    ),
+                    status=502,
+                )
                 return
 
             self._send_json(
@@ -185,7 +222,36 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
             )
             return
 
-        self._send_json(_scripted_fallback_payload(runtime_id, trace))
+        self._send_json(
+            _live_error_payload(runtime_id, state=runtime.status),
+            status=503,
+        )
+
+    def _cancel_trace(self) -> None:
+        try:
+            payload = self._read_json_body()
+            request_id = _request_id_from_payload(payload)
+            result = self._state.modeldeck_adapter.cancel(
+                request_id,
+                timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS,
+            )
+        except (ValueError, json.JSONDecodeError) as error:
+            self._send_json({"error": str(error), "code": "invalid_request_id"}, status=400)
+            return
+        except ModelDeckError as error:
+            self._send_json(
+                {"error": str(error), "code": error.code, "state": _request_error_state(error.code)},
+                status=error.http_status or 503,
+            )
+            return
+
+        self._send_json(
+            {
+                "request_id": request_id,
+                "cancelled": result["ok"],
+                "state": "request_cancelled" if result["ok"] else "request_not_active",
+            }
+        )
 
     def _read_json_body(self) -> dict:
         content_length = int(self.headers.get("Content-Length", "0"))
@@ -221,16 +287,19 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-def _scripted_fallback_payload(runtime_id: str, trace, *, reason: str | None = None) -> dict:
-    message = "Live generation unavailable"
-    if reason:
-        message = f"{message}: {reason}"
+def _live_error_payload(
+    runtime_id: str,
+    *,
+    state: str = "request_failed",
+    code: str | None = None,
+) -> dict:
     return {
-        "mode": "scripted-fallback",
+        "mode": "modeldeck-unavailable",
         "runtime_id": runtime_id,
-        "fallback_used": True,
-        "message": message,
-        "trace": trace.to_dict(),
+        "fallback_used": False,
+        "message": _live_error_message(state),
+        "state": state,
+        "code": code,
     }
 
 
@@ -239,27 +308,35 @@ def _modeldeck_statuses(config: RuntimeConfig, adapter: ModelDeckAdapter) -> dic
         return {}
 
     try:
-        discovery = adapter.models(timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS)
-    except AdapterError as error:
+        payload = adapter.models(timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS)
+    except ModelDeckError as error:
         return {
-            model: ModelDeckStatus(available=False, error=str(error))
+            model: ModelDeckStatus(False, "gateway_unavailable", str(error))
             for model in config.modeldeck_models
         }
 
-    advertised = {entry["id"]: entry for entry in discovery["data"]}
+    configured = set(config.modeldeck_models)
     statuses: dict[str, ModelDeckStatus] = {}
-    for model in config.modeldeck_models:
-        entry = advertised.get(model)
-        if entry is None:
-            statuses[model] = ModelDeckStatus(
-                available=False,
-                error=f"ModelDeck does not advertise alias {model}",
-            )
+    for entry in payload["data"]:
+        model = entry["id"]
+        if model not in configured:
             continue
-        ready = bool(entry["ready"])
-        provider = entry.get("effective_provider")
-        reason = f"Ready through {provider}" if ready and provider else f"ModelDeck alias {model} has no ready worker"
-        statuses[model] = ModelDeckStatus(available=ready, model_loaded=ready, error=reason)
+        if entry["ready"]:
+            statuses[model] = ModelDeckStatus(True, "ready", "ModelDeck trace route is ready.")
+        else:
+            statuses[model] = ModelDeckStatus(
+                False,
+                "provider_not_ready",
+                "This model is configured in ModelDeck but its worker is not ready. "
+                "Start it from the ModelDeck Workers view.",
+            )
+    for model in config.modeldeck_models:
+        if model not in statuses:
+            statuses[model] = ModelDeckStatus(
+                False,
+                "route_not_advertised",
+                f"ModelDeck does not advertise the '{model}' route in the active demo set.",
+            )
     return statuses
 
 
@@ -267,7 +344,7 @@ def _runtime_status_payload(statuses: dict[str, ModelDeckStatus]) -> dict[str, d
     return {
         model: {
             "available": status.available,
-            "model_loaded": status.model_loaded,
+            "state": status.state,
             "reason": status.error,
         }
         for model, status in statuses.items()
@@ -276,7 +353,10 @@ def _runtime_status_payload(statuses: dict[str, ModelDeckStatus]) -> dict[str, d
 
 def _refresh_runtime_options(state: ServerState) -> None:
     statuses = _modeldeck_statuses(state.config, state.modeldeck_adapter)
-    state.modeldeck_status = statuses.get(state.config.modeldeck_model, ModelDeckStatus(available=False))
+    state.modeldeck_status = statuses.get(
+        state.config.modeldeck_model,
+        ModelDeckStatus(available=False, state="gateway_unavailable"),
+    )
     state.runtime_options = build_runtime_options(
         state.config,
         modeldeck_statuses=_runtime_status_payload(statuses),
@@ -292,6 +372,45 @@ def _live_prompt_from_payload(payload: dict, fallback_prompt: str) -> str:
     if not prompt:
         return fallback_prompt
     return prompt[:500]
+
+
+def _request_id_from_payload(payload: dict) -> str:
+    request_id = payload.get("request_id")
+    if not isinstance(request_id, str) or REQUEST_ID_PATTERN.fullmatch(request_id) is None:
+        raise ValueError("request_id must be 1–128 safe identifier characters")
+    return request_id
+
+
+def _request_error_state(code: str) -> str:
+    return {
+        "local_provider_unavailable": "provider_not_ready",
+        "invalid_worker_trace_metadata": "invalid_worker_trace_metadata",
+        "request_cancelled": "request_cancelled",
+        "gateway_unavailable": "gateway_unavailable",
+    }.get(code, "request_failed")
+
+
+def _live_error_message(state: str) -> str:
+    messages = {
+        "gateway_unavailable": "The ModelDeck gateway is unavailable. Check that ModelDeck is running.",
+        "route_not_advertised": "This model is not advertised by the active ModelDeck demo set.",
+        "provider_not_ready": (
+            "This model is configured in ModelDeck but its worker is not ready. "
+            "Start it from the ModelDeck Workers view."
+        ),
+        "request_cancelled": "The live ModelDeck trace request was cancelled.",
+        "invalid_worker_trace_metadata": "ModelDeck returned invalid trace metadata; no live trace was shown.",
+        "request_failed": "The live ModelDeck trace request failed; no prepared output was substituted.",
+    }
+    return messages.get(state, messages["request_failed"])
+
+
+def _live_error_status(code: str) -> int:
+    if code == "invalid_worker_trace_metadata":
+        return 502
+    if code == "request_cancelled":
+        return 409
+    return 503
 
 
 def run_server(

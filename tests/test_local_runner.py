@@ -12,7 +12,6 @@ def test_local_runner_starts_only_token_trail(monkeypatch) -> None:
         modeldeck_enabled=True,
         modeldeck_url="http://127.0.0.1:8600",
         modeldeck_model="qwen-1-5b",
-        modeldeck_models=("qwen-0-5b", "qwen-1-5b", "qwen-3b"),
     )
     monkeypatch.setattr("token_trail.local_runner.check_port_or_exit", lambda **kwargs: calls.append(("port", kwargs)))
     monkeypatch.setattr(

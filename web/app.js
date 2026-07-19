@@ -22,6 +22,9 @@ let trailStarted = false;
 let runNotice = "";
 let runtimeRequestId = 0;
 let runtimePollTimer = null;
+let activeGenerationController = null;
+let activeGenerationRequestId = null;
+let generationInProgress = false;
 
 const TRAIL_SPEED_DELAYS_MS = {
   slow: 2200,
@@ -82,6 +85,8 @@ async function selectRuntime() {
   if (isSelectedRuntimeLoading()) {
     explanation.textContent = `Loading ${currentRuntime.model}...`;
     pollSelectedRuntimeUntilSettled(requestId);
+  } else if (!currentRuntime.available) {
+    explanation.textContent = currentRuntime.notes;
   }
 }
 
@@ -102,19 +107,33 @@ function runtimeStatusLabel(option) {
       return "select to load";
     case "unavailable":
       return "unavailable";
+    case "gateway_unavailable":
+      return "gateway unavailable";
+    case "route_not_advertised":
+      return "route not advertised";
+    case "provider_not_ready":
+      return "local provider not ready";
     default:
       return option.available ? "ready" : "unavailable";
   }
 }
 
 function updatePlayButton() {
-  runtimeSelect.disabled = Boolean(timer);
+  runtimeSelect.disabled = Boolean(timer) || generationInProgress;
+  playButton.disabled = isSelectedRuntimeLoading() || generationInProgress || isLiveRuntimeUnavailable();
+  if (generationInProgress) {
+    playButton.textContent = "Generating...";
+    return;
+  }
   if (timer) {
     playButton.textContent = "Running...";
     return;
   }
   playButton.textContent = buttonLabelForRuntime();
-  playButton.disabled = isSelectedRuntimeLoading();
+}
+
+function isLiveRuntimeUnavailable() {
+  return currentRuntime?.backend === "modeldeck" && !currentRuntime.available;
 }
 
 function isSelectedRuntimeLoading() {
@@ -183,7 +202,7 @@ function renderTokens(container, tokens) {
 }
 
 function promptTokensForDisplay(trace) {
-  const tokens = trace.user_prompt_tokens || trace.prompt_tokens || [];
+  const tokens = trace.mode === "modeldeck-live-trace" ? trace.user_prompt_tokens || [] : trace.prompt_tokens || [];
   return tokens.filter((token) => token.trim() !== "");
 }
 
@@ -324,23 +343,49 @@ function runStep() {
 }
 
 async function generateTrace() {
-  const body = { runtime_id: currentRuntime.id, trace_id: traceSelect.value };
+  const requestId = crypto.randomUUID();
+  const controller = new AbortController();
+  activeGenerationRequestId = requestId;
+  activeGenerationController = controller;
+  generationInProgress = true;
+  updatePlayButton();
+  const body = { runtime_id: currentRuntime.id, trace_id: traceSelect.value, request_id: requestId };
   if (canEditPrompt()) {
     body.prompt = promptInput.value.trim();
   }
 
-  const response = await fetch("/api/generate-trace", {
+  try {
+    const response = await fetch("/api/generate-trace", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const payload = await response.json();
+
+    return payload;
+  } finally {
+    if (activeGenerationRequestId === requestId) {
+      activeGenerationRequestId = null;
+      activeGenerationController = null;
+      generationInProgress = false;
+      updatePlayButton();
+    }
+  }
+}
+
+function cancelActiveGeneration() {
+  if (!activeGenerationRequestId) {
+    return false;
+  }
+  const requestId = activeGenerationRequestId;
+  activeGenerationController?.abort();
+  fetch("/api/generate-trace/cancel", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error || "Generation failed");
-  }
-
-  return payload;
+    body: JSON.stringify({ request_id: requestId }),
+  }).catch(() => {});
+  return true;
 }
 
 function showModelDeckLiveTrace(payload) {
@@ -357,16 +402,13 @@ function showModelDeckLiveTrace(payload) {
   startPreparedTrail();
 }
 
-function loadFallbackTrace(payload) {
-  currentTrace = payload.trace || selectedTrace || currentTrace;
-  resetDemo();
-  renderPrompt();
-  runNotice = payload.message || "Live generation unavailable — showing prepared trace";
+function showLiveUnavailable(payload) {
+  resetDemo({ restoreSelectedTrace: true });
+  runNotice = payload.message || "Live ModelDeck trace unavailable";
   explanation.textContent = runNotice;
   loadRuntimeOptions().catch((error) => {
     explanation.textContent = `Could not refresh runtime status: ${error}`;
   });
-  startPreparedTrail();
 }
 
 async function startDemo() {
@@ -384,23 +426,32 @@ async function startDemo() {
   }
 
   if (currentRuntime && currentRuntime.backend !== "scripted") {
-    playButton.textContent = currentRuntime.available ? "Generating..." : "Loading prepared trail...";
+    playButton.textContent = "Generating...";
     try {
       const payload = await generateTrace();
       if (payload.mode === "modeldeck-live-trace") {
         showModelDeckLiveTrace(payload);
+      } else if (payload.mode === "modeldeck-unavailable") {
+        showLiveUnavailable(payload);
       } else {
-        loadFallbackTrace(payload);
+        throw new Error("Unexpected live trace response");
       }
     } catch (error) {
+      if (error.name === "AbortError") {
+        resetDemo({ restoreSelectedTrace: true });
+        runNotice = "Trace request cancelled";
+        explanation.textContent = runNotice;
+        return;
+      }
       resetDemo({ restoreSelectedTrace: true });
-      runNotice = `Live generation unavailable — showing prepared trace (${error})`;
+      runNotice = `Live ModelDeck request failed; no prepared output was substituted (${error})`;
       explanation.textContent = runNotice;
-      startPreparedTrail();
     }
     return;
   }
 
+  runNotice = "Prepared replay mode";
+  explanation.textContent = runNotice;
   startPreparedTrail();
 }
 
@@ -426,7 +477,9 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
   runNotice = "";
   candidateList.replaceChildren();
   generatedText.textContent = "";
-  explanation.textContent = "Press start to see candidate tokens appear step by step.";
+  explanation.textContent = isLiveRuntimeUnavailable()
+    ? currentRuntime.notes
+    : "Press start to see candidate tokens appear step by step.";
   updateReplayNavigator();
   renderPrompt();
   updatePlayButton();
@@ -442,7 +495,7 @@ function buttonLabelForRuntime() {
   if (isSelectedRuntimeLoading()) {
     return "Loading model...";
   }
-  return currentRuntime.available ? "Generate live trail" : "Show prepared trail";
+  return currentRuntime.available ? "Generate live trail" : "Live model unavailable";
 }
 
 traceSelect.addEventListener("change", loadSelectedTrace);
@@ -475,8 +528,13 @@ trailSpeedSelect.addEventListener("change", () => {
 });
 playButton.addEventListener("click", startDemo);
 resetButton.addEventListener("click", () => {
+  const cancelled = cancelActiveGeneration();
   resetDemo({ restoreSelectedTrace: true });
   resetPromptToTrace();
+  if (cancelled) {
+    runNotice = "Trace request cancelled";
+    explanation.textContent = runNotice;
+  }
 });
 
 Promise.all([loadRuntimeOptions(), loadTraceList()]).catch((error) => {

@@ -41,32 +41,31 @@ class RuntimeState:
 
 def build_runtime_options(
     config: RuntimeConfig,
-    modeldeck_statuses: Mapping[str, Mapping[str, bool]] | None = None,
+    modeldeck_statuses: Mapping[str, Mapping[str, object]] | None = None,
 ) -> list[RuntimeOption]:
     """Build selectable runtime options from config."""
 
     options = [
         RuntimeOption(
             id="scripted:prepared-traces",
-            label="Scripted fallback traces",
+            label="Prepared replay mode",
             backend="scripted",
             model=None,
             available=True,
             status="ready",
-            notes="Guaranteed local fallback; no model server required.",
+            notes="Explicit prepared replay; no live model request is made.",
         )
     ]
 
     if config.modeldeck_enabled:
-        for model in config.modeldeck_models:
-            status_payload = (modeldeck_statuses or {}).get(model, {})
+        statuses = modeldeck_statuses or {}
+        ordered_models = [*statuses, *(model for model in config.modeldeck_models if model not in statuses)]
+        for model in ordered_models:
+            status_payload = statuses.get(model, {})
             model_available = bool(status_payload.get("available", False))
             reason = status_payload.get("reason")
-            notes = (
-                reason
-                if isinstance(reason, str) and reason
-                else "Ready through ModelDeck" if model_available else "No ready ModelDeck worker; scripted fallback remains available."
-            )
+            state = status_payload.get("state")
+            notes = reason if isinstance(reason, str) and reason else "ModelDeck readiness is unknown."
             options.append(
                 RuntimeOption(
                     id=f"modeldeck:{model}",
@@ -74,7 +73,7 @@ def build_runtime_options(
                     backend="modeldeck",
                     model=model,
                     available=model_available,
-                    status="ready" if model_available else "unavailable",
+                    status=str(state) if isinstance(state, str) else "gateway_unavailable",
                     notes=notes,
                 )
             )
@@ -90,7 +89,7 @@ def default_runtime_id(config: RuntimeConfig, options: list[RuntimeOption]) -> s
         configured_model = config.modeldeck_model
 
     for option in options:
-        if option.backend == config.backend and option.model == configured_model and option.available:
+        if option.backend == config.backend and option.model == configured_model:
             return option.id
 
     return options[0].id

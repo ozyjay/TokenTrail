@@ -17,18 +17,17 @@ def test_primary_docs_describe_external_modeldeck_ownership() -> None:
         assert "Token Trail" in document
 
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
-    assert "never starts, warms, stops, or downloads models" in readme
+    assert "never starts, warms, stops or downloads models" in readme
     assert "GET /v1/models" in readme
     assert "POST /native/autoregressive/trace" in readme
 
 
-def test_modeldeck_aliases_and_config_are_documented() -> None:
+def test_modeldeck_public_route_and_config_are_documented() -> None:
     for path in ("README.md", ".env.example"):
         document = (PROJECT_ROOT / path).read_text(encoding="utf-8")
         assert "TOKEN_TRAIL_MODELDECK_URL=" in document
-        assert "qwen-0-5b" in document
-        assert "qwen-1-5b" in document
-        assert "qwen-3b" in document
+        assert "TOKEN_TRAILS_MODEL=qwen-1-5b" in document
+        assert "qwen-0-5b,qwen-1-5b,qwen-3b" in document
 
 
 def test_agents_doc_records_project_safety_boundaries() -> None:

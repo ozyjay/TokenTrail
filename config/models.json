@@ -1,18 +1,12 @@
 {
   "defaults": {
     "backend": "modeldeck",
-    "modeldeck_model": "qwen-1-5b",
+    "model": "qwen-1-5b",
     "modeldeck_instructions_file": "config/instructions/modeldeck_default.txt"
   },
   "modeldeck": [
-    {
-      "model": "qwen-0-5b"
-    },
-    {
-      "model": "qwen-1-5b"
-    },
-    {
-      "model": "qwen-3b"
-    }
+    {"model": "qwen-0-5b"},
+    {"model": "qwen-1-5b"},
+    {"model": "qwen-3b"}
   ]
 }

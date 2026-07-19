@@ -17,7 +17,7 @@ def test_build_runtime_options_includes_only_scripted_by_default() -> None:
     assert [option.id for option in options] == ["scripted:prepared-traces"]
 
 
-def test_build_runtime_options_includes_ready_modeldeck_aliases() -> None:
+def test_build_runtime_options_keeps_gateway_model_order() -> None:
     config = make_config()
     config = RuntimeConfig(
         **{
@@ -25,27 +25,30 @@ def test_build_runtime_options_includes_ready_modeldeck_aliases() -> None:
             "backend": "modeldeck",
             "modeldeck_enabled": True,
             "modeldeck_model": "qwen-1-5b",
-            "modeldeck_models": ("qwen-0-5b", "qwen-1-5b", "qwen-3b"),
         }
     )
 
     options = build_runtime_options(
         config,
         modeldeck_statuses={
-            "qwen-0-5b": {"available": True, "model_loaded": True, "reason": "Ready through qwen-small-rocm"},
-            "qwen-1-5b": {"available": True, "model_loaded": True, "reason": "Ready through qwen-1-5b-rocm"},
-            "qwen-3b": {"available": False, "model_loaded": False, "reason": "No ready worker"},
+            "qwen-3b": {
+                "available": True,
+                "state": "ready",
+                "reason": "ModelDeck trace route is ready.",
+            },
+            "qwen-0-5b": {"available": False, "state": "provider_not_ready"},
+            "qwen-1-5b": {"available": True, "state": "ready"},
         },
     )
 
-    assert [option.id for option in options[:4]] == [
+    assert [option.id for option in options] == [
         "scripted:prepared-traces",
+        "modeldeck:qwen-3b",
         "modeldeck:qwen-0-5b",
         "modeldeck:qwen-1-5b",
-        "modeldeck:qwen-3b",
     ]
     assert default_runtime_id(config, options) == "modeldeck:qwen-1-5b"
-    assert options[3].status == "unavailable"
+    assert options[1].status == "ready"
     assert options[0].available
 
 
@@ -56,19 +59,23 @@ def test_default_runtime_falls_back_to_scripted_for_unknown_backend() -> None:
     assert default_runtime_id(config, options) == "scripted:prepared-traces"
 
 
-def test_default_runtime_falls_back_to_scripted_when_modeldeck_alias_is_unready() -> None:
+def test_default_runtime_keeps_explicit_live_selection_when_model_is_unready() -> None:
     config = RuntimeConfig(
         **{
             **make_config().__dict__,
             "backend": "modeldeck",
             "modeldeck_enabled": True,
             "modeldeck_model": "qwen-1-5b",
-            "modeldeck_models": ("qwen-1-5b",),
         }
     )
-    options = build_runtime_options(config, modeldeck_statuses={"qwen-1-5b": {"available": False}})
+    options = build_runtime_options(
+        config,
+        modeldeck_statuses={
+            "qwen-1-5b": {"available": False, "state": "provider_not_ready"}
+        },
+    )
 
-    assert default_runtime_id(config, options) == "scripted:prepared-traces"
+    assert default_runtime_id(config, options) == "modeldeck:qwen-1-5b"
 
 
 def test_select_runtime_validates_known_ids() -> None:
@@ -77,9 +84,11 @@ def test_select_runtime_validates_known_ids() -> None:
             **make_config().__dict__,
             "modeldeck_enabled": True,
             "modeldeck_model": "qwen-1-5b",
-            "modeldeck_models": ("qwen-1-5b",),
         }
     )
-    options = build_runtime_options(config, modeldeck_statuses={"qwen-1-5b": {"available": True}})
+    options = build_runtime_options(
+        config,
+        modeldeck_statuses={"qwen-1-5b": {"available": True, "state": "ready"}},
+    )
 
     assert select_runtime("modeldeck:qwen-1-5b", options) == "modeldeck:qwen-1-5b"
