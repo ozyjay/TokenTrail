@@ -6,7 +6,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 def test_project_uses_powershell_automation_only() -> None:
     assert not any((PROJECT_ROOT / "scripts").glob("*.sh"))
-    for path in ("scripts/setup.ps1", "scripts/clean.ps1", "scripts/test.ps1", "scripts/run.ps1"):
+    for path in (
+        "scripts/setup.ps1",
+        "scripts/clean.ps1",
+        "scripts/test.ps1",
+        "scripts/run.ps1",
+        "scripts/stop.ps1",
+    ):
         assert (PROJECT_ROOT / path).exists()
 
 

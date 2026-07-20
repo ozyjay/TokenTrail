@@ -25,3 +25,4 @@ artifacts/
 # Open Day local runtime
 logs/
 visitor-data/
+.token-trail.pid

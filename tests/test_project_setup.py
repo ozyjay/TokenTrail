@@ -18,6 +18,7 @@ def test_required_project_files_exist() -> None:
         "scripts/clean.ps1",
         "scripts/test.ps1",
         "scripts/run.ps1",
+        "scripts/stop.ps1",
         "web/index.html",
     ]
 
@@ -65,6 +66,17 @@ def test_run_script_starts_only_token_trail() -> None:
     assert "poetry install --with hf-trace" not in powershell_script
     assert "Installing optional HF trace" not in powershell_script
     assert "poetry run python -m token_trail.local_runner" in powershell_script
+
+
+def test_stop_script_targets_only_recorded_token_trail_process() -> None:
+    powershell_script = (PROJECT_ROOT / "scripts/stop.ps1").read_text(encoding="utf-8")
+
+    assert ".token-trail.pid" in powershell_script
+    assert "token_trail\\.local_runner" in powershell_script
+    assert "Stop-Process -Id $ServiceProcessId" in powershell_script
+    assert "kill -TERM $ServiceProcessId" in powershell_script
+    assert "Stop-Process -Name" not in powershell_script
+    assert "Stop-Process -Id $ServiceProcessId -Force" not in powershell_script
 
 
 def test_legacy_hf_diagnostics_remain_available_without_driving_startup() -> None:

@@ -6,6 +6,12 @@ ModelDeck must be running separately for live-trace validation. In the “2026 O
 pwsh -NoProfile -File ./scripts/run.ps1
 ```
 
+Stop Token Trail after rehearsal with:
+
+```powershell
+pwsh -NoProfile -File ./scripts/stop.ps1
+```
+
 Verify the following:
 
 1. The runtime selector lists `qwen-0-5b`, `qwen-1-5b` and `qwen-3b` in gateway order with readiness matching ModelDeck.

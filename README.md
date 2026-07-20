@@ -34,6 +34,12 @@ pwsh -NoProfile -File ./scripts/run.ps1
 
 Open <http://127.0.0.1:3100>. The runtime selector shows all three public aliases and their current readiness. If a configured route is not ready, Token Trail directs the operator to ModelDeck's Workers view. It does not silently switch aliases or substitute prepared output. To use prepared content, explicitly select “Prepared replay mode”.
 
+Stop Token Trail without affecting ModelDeck or unrelated Python processes:
+
+```powershell
+pwsh -NoProfile -File ./scripts/stop.ps1
+```
+
 ## Configuration
 
 Copy `.env.example` to `.env` for machine-specific overrides. The normal live configuration is:
