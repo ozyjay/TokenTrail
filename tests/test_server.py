@@ -36,10 +36,12 @@ class FakeModelDeckAdapter:
         gateway_order: tuple[str, ...] = ("qwen-3b", "qwen-0-5b", "qwen-1-5b"),
         ready: set[str] | None = None,
         error_code: str | None = None,
+        generated_token: str = "Tokens.",
     ) -> None:
         self.gateway_order = gateway_order
         self.ready = ready if ready is not None else set(gateway_order)
         self.error_code = error_code
+        self.generated_token = generated_token
         self.generate_calls = []
         self.cancel_calls = []
 
@@ -73,8 +75,10 @@ class FakeModelDeckAdapter:
                 {
                     "step": 0,
                     "selected_token_id": 30,
-                    "selected_token": "Tokens.",
-                    "candidates": [{"token_id": 30, "token": "Tokens.", "probability": 0.8}],
+                    "selected_token": self.generated_token,
+                    "candidates": [
+                        {"token_id": 30, "token": self.generated_token, "probability": 0.8}
+                    ],
                     "elapsed_seconds": 0.2,
                     "explanation": "This was selected from returned probabilities.",
                 }
@@ -208,6 +212,25 @@ def test_invalid_worker_metadata_has_distinct_fallback_state() -> None:
     assert status == 502
     assert payload["state"] == "invalid_worker_trace_metadata"
     assert "invalid trace metadata" in payload["message"]
+
+
+def test_generated_control_token_is_rejected_at_server_boundary() -> None:
+    adapter = FakeModelDeckAdapter(generated_token="<|im_end|>")
+    with running_server(make_config(), adapter) as base_url:
+        payload, status = _post_json_with_status(
+            f"{base_url}/api/generate-trace",
+            {
+                "runtime_id": "modeldeck:qwen-1-5b",
+                "trace_id": "robot-university",
+                "request_id": "browser-control-token",
+            },
+        )
+
+    assert status == 502
+    assert payload["mode"] == "modeldeck-unavailable"
+    assert payload["state"] == "invalid_worker_trace_metadata"
+    assert payload["fallback_used"] is False
+    assert "trace" not in payload
 
 
 def test_cancellation_is_forwarded_through_modeldeck_gateway_contract() -> None:

@@ -50,7 +50,7 @@ TOKEN_TRAIL_MODELDECK_INSTRUCTIONS_FILE=config/instructions/modeldeck_default.tx
 
 The fixed hidden instruction keeps public responses short and suitable for the demo. Token Trail sends it as a system message while retaining the staff-entered prompt as the visible prompt.
 
-For live traces, Token Trail preserves ModelDeck's generated tokens, probabilities, returned alternatives, timing/metrics, complete prompt token metadata and user-prompt token metadata. The public prompt view uses only `user_prompt_tokens`; complete prompt tokens can contain hidden instructions or chat-template markers and are never rendered. Invalid or misaligned metadata is treated as `invalid_worker_trace_metadata`, not shown as a successful trace.
+For live traces, Token Trail preserves ModelDeck's generated tokens, probabilities, returned alternatives, timing/metrics, complete prompt token metadata and user-prompt token metadata. The public prompt view uses only `user_prompt_tokens`; complete prompt tokens can contain hidden instructions or chat-template markers and are never rendered. Invalid or misaligned metadata, including model-control markers leaked into generated tokens or alternatives, is treated as `invalid_worker_trace_metadata` and is not shown as a successful trace.
 
 Each browser request supplies a bounded request ID. Resetting during generation aborts the browser request and forwards cancellation through ModelDeck's stable `POST /v1/requests/{request_id}/cancel` route. ModelDeck's structured `local_provider_unavailable` response is shown as a local readiness state. There is no cloud inference or model download path.
 

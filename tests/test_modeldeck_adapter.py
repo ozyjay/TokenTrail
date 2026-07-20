@@ -3,7 +3,7 @@ import json
 from urllib.error import HTTPError, URLError
 
 from token_trail.adapters.base import AdapterError
-from token_trail.adapters.modeldeck import ModelDeckAdapter, ModelDeckError
+from token_trail.adapters.modeldeck import ModelDeckAdapter, ModelDeckError, validate_trace_payload
 
 
 class FakeResponse:
@@ -234,6 +234,84 @@ def test_generate_trace_rejects_incomplete_sentence() -> None:
         )
     except AdapterError as error:
         assert "complete sentence" in str(error)
+    else:
+        raise AssertionError("expected AdapterError")
+
+
+def test_generate_trace_rejects_generated_model_control_tokens() -> None:
+    for control_token in ("<|im_end|>", "<|endoftext|>", "<eos>"):
+        payload = native_trace()
+        payload["events"][4]["selected"]["token"] = control_token
+        payload["events"][4]["text_so_far"] += control_token
+        adapter = ModelDeckAdapter(
+            "http://127.0.0.1:8600",
+            opener=lambda request, timeout, payload=payload: FakeResponse(payload),
+        )
+
+        try:
+            adapter.generate_trace(
+                prompt="Explain token prediction.",
+                instructions="Use one sentence.",
+                model="token-explainer",
+                max_new_tokens=96,
+                top_k=5,
+                temperature=0.3,
+                timeout_seconds=20,
+                request_id="trace-control-token",
+            )
+        except ModelDeckError as error:
+            assert error.code == "invalid_worker_trace_metadata"
+        else:
+            raise AssertionError("expected ModelDeckError")
+
+
+def test_generate_trace_rejects_control_tokens_in_returned_alternatives() -> None:
+    payload = native_trace()
+    payload["events"][4]["alternatives"][1]["token"] = "<|im_end|>"
+    adapter = ModelDeckAdapter(
+        "http://127.0.0.1:8600",
+        opener=lambda request, timeout: FakeResponse(payload),
+    )
+
+    try:
+        adapter.generate_trace(
+            prompt="Explain token prediction.",
+            instructions="Use one sentence.",
+            model="token-explainer",
+            max_new_tokens=96,
+            top_k=5,
+            temperature=0.3,
+            timeout_seconds=20,
+            request_id="trace-control-token-alternative",
+        )
+    except ModelDeckError as error:
+        assert error.code == "invalid_worker_trace_metadata"
+    else:
+        raise AssertionError("expected ModelDeckError")
+
+
+def test_trace_validation_rejects_control_tokens_from_custom_adapters() -> None:
+    trace = {
+        "mode": "modeldeck-live-trace",
+        "prompt": "Explain token prediction.",
+        "prompt_token_ids": [10],
+        "prompt_tokens": ["hidden"],
+        "user_prompt_token_ids": [20],
+        "user_prompt_tokens": ["Explain token prediction."],
+        "steps": [
+            {
+                "selected_token": "Safe.",
+                "text_so_far": "Safe.<|endoftext|>",
+                "candidates": [{"token": "Safe.", "probability": 1.0}],
+                "explanation": "Returned by the model.",
+            }
+        ],
+    }
+
+    try:
+        validate_trace_payload(trace)
+    except AdapterError as error:
+        assert "generated control token" in str(error)
     else:
         raise AssertionError("expected AdapterError")
 

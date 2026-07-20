@@ -19,6 +19,10 @@ MAX_TRACE_TOKENS = 128
 MAX_TRACE_TOP_K = 20
 MAX_TRACE_TEMPERATURE = 2.0
 MAX_REQUEST_TIMEOUT_SECONDS = 60.0
+_GENERATED_CONTROL_TOKEN = re.compile(
+    r"<\|[A-Za-z0-9_.:-]{1,64}\|>|<(?:bos|eos|pad|unk)>",
+    re.IGNORECASE,
+)
 
 
 class ModelDeckError(AdapterError):
@@ -171,6 +175,11 @@ def _convert_trace(payload: Any, *, prompt: str, model: str) -> dict:
         )
 
     events = payload["events"]
+    if any(_event_contains_generated_control_token(event) for event in events):
+        raise ModelDeckError(
+            "ModelDeck trace contains a generated control token",
+            code="invalid_worker_trace_metadata",
+        )
     if payload.get("cancelled") is True or any(
         isinstance(event, dict) and event.get("cancelled") is True for event in events
     ):
@@ -274,6 +283,24 @@ def _convert_event(event: Any) -> dict:
     return step
 
 
+def _event_contains_generated_control_token(event: Any) -> bool:
+    if not isinstance(event, dict):
+        return False
+    selected = event.get("selected")
+    selected_token = selected.get("token") if isinstance(selected, dict) else None
+    text_so_far = event.get("text_so_far")
+    alternatives = event.get("alternatives")
+    alternative_tokens = (
+        [alternative.get("token") for alternative in alternatives if isinstance(alternative, dict)]
+        if isinstance(alternatives, list)
+        else []
+    )
+    return any(
+        isinstance(value, str) and _GENERATED_CONTROL_TOKEN.search(value)
+        for value in (selected_token, text_so_far, *alternative_tokens)
+    )
+
+
 def validate_trace_payload(trace: Any) -> None:
     if not isinstance(trace, dict) or trace.get("mode") != "modeldeck-live-trace":
         raise AdapterError("ModelDeck trace payload has an unexpected mode")
@@ -294,6 +321,15 @@ def validate_trace_payload(trace: Any) -> None:
         candidates = step.get("candidates")
         if not isinstance(candidates, list) or not candidates:
             raise AdapterError("ModelDeck trace step has no candidates")
+        public_token_values = [step["selected_token"], step.get("text_so_far")]
+        public_token_values.extend(
+            candidate.get("token") for candidate in candidates if isinstance(candidate, dict)
+        )
+        if any(
+            isinstance(value, str) and _GENERATED_CONTROL_TOKEN.search(value)
+            for value in public_token_values
+        ):
+            raise AdapterError("ModelDeck trace payload contains a generated control token")
         if not isinstance(step.get("explanation"), str) or not step["explanation"]:
             raise AdapterError("ModelDeck trace step is missing an explanation")
 
