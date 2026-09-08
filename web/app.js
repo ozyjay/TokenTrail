@@ -2,12 +2,16 @@ const traceSelect = document.querySelector("#traceSelect");
 const runtimeSelect = document.querySelector("#runtimeSelect");
 const trailSpeedSelect = document.querySelector("#trailSpeedSelect");
 const playButton = document.querySelector("#playButton");
+const cancelButton = document.querySelector("#cancelButton");
+const retryRuntimeButton = document.querySelector("#retryRuntimeButton");
 const resetButton = document.querySelector("#resetButton");
+const generationElapsed = document.querySelector("#generationElapsed");
 const promptText = document.querySelector("#promptText");
 const promptInput = document.querySelector("#promptInput");
 const promptTokens = document.querySelector("#promptTokens");
 const candidateList = document.querySelector("#candidateList");
 const generatedText = document.querySelector("#generatedText");
+const traceMeta = document.querySelector("#traceMeta");
 const generationPosition = document.querySelector("#generationPosition");
 const generationPositionOutput = document.querySelector("#generationPositionOutput");
 const explanation = document.querySelector("#explanation");
@@ -25,6 +29,8 @@ let runtimePollTimer = null;
 let activeGenerationController = null;
 let activeGenerationRequestId = null;
 let generationInProgress = false;
+let generationStartedAt = null;
+let generationElapsedTimer = null;
 
 const TRAIL_SPEED_DELAYS_MS = {
   slow: 2200,
@@ -32,9 +38,24 @@ const TRAIL_SPEED_DELAYS_MS = {
   fast: 700,
 };
 
+async function readJsonResponse(response) {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(`The demo server returned an invalid response (${response.status || "unknown status"})`);
+  }
+}
+
+function responseError(payload, fallback) {
+  return new Error(payload?.message || payload?.error || fallback);
+}
+
 async function loadRuntimeOptions({ requestId = runtimeRequestId } = {}) {
   const response = await fetch("/api/runtime");
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw responseError(payload, "Could not load runtime status");
+  }
   if (requestId !== runtimeRequestId) {
     return null;
   }
@@ -58,6 +79,8 @@ async function loadRuntimeOptions({ requestId = runtimeRequestId } = {}) {
   if (isSelectedRuntimeLoading()) {
     explanation.textContent = `Loading ${currentRuntime.model}...`;
     pollSelectedRuntimeUntilSettled(requestId);
+  } else {
+    clearTimeout(runtimePollTimer);
   }
   return payload;
 }
@@ -70,10 +93,10 @@ async function selectRuntime() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ runtime_id: runtimeSelect.value }),
   });
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
 
   if (!response.ok) {
-    throw new Error(payload.error || "Runtime selection failed");
+    throw responseError(payload, "Runtime selection failed");
   }
 
   if (requestId !== runtimeRequestId) {
@@ -94,6 +117,7 @@ function renderRuntimeStatus(runtime) {
   const suffix = runtimeStatusLabel(runtime);
   runtimeSelect.title = `${runtime.backend}: ${runtime.model || "prepared traces"} · ${suffix}. ${runtime.notes}`;
   runtimeSelect.setAttribute("aria-label", `Runtime: ${runtime.label}, ${suffix}`);
+  retryRuntimeButton.hidden = runtime.backend !== "modeldeck" || runtime.available || isSelectedRuntimeLoading();
   updatePlayButton();
 }
 
@@ -123,12 +147,15 @@ function runtimeStatusLabel(option) {
 function updatePlayButton() {
   runtimeSelect.disabled = Boolean(timer) || generationInProgress;
   playButton.disabled = isSelectedRuntimeLoading() || generationInProgress || isLiveRuntimeUnavailable();
+  cancelButton.hidden = !generationInProgress;
+  cancelButton.disabled = false;
+  retryRuntimeButton.disabled = Boolean(timer) || generationInProgress || isSelectedRuntimeLoading();
   if (generationInProgress) {
     playButton.textContent = "Generating...";
     return;
   }
   if (timer) {
-    playButton.textContent = "Running...";
+    playButton.textContent = "Pause trail";
     return;
   }
   playButton.textContent = buttonLabelForRuntime();
@@ -139,7 +166,28 @@ function isLiveRuntimeUnavailable() {
 }
 
 function isSelectedRuntimeLoading() {
-  return false;
+  return currentRuntime?.backend === "modeldeck" && currentRuntime.status === "loading";
+}
+
+async function retryRuntimeStatus() {
+  const requestId = ++runtimeRequestId;
+  clearTimeout(runtimePollTimer);
+  retryRuntimeButton.disabled = true;
+  explanation.textContent = "Refreshing ModelDeck runtime status...";
+  try {
+    const payload = await loadRuntimeOptions({ requestId });
+    if (!payload || requestId !== runtimeRequestId || isSelectedRuntimeLoading()) {
+      return;
+    }
+    explanation.textContent = currentRuntime.available
+      ? `${currentRuntime.model} is ready.`
+      : currentRuntime.notes;
+  } catch (error) {
+    retryRuntimeButton.hidden = false;
+    explanation.textContent = `Could not refresh runtime status: ${error.message || error}`;
+  } finally {
+    retryRuntimeButton.disabled = false;
+  }
 }
 
 function pollSelectedRuntimeUntilSettled(requestId) {
@@ -170,7 +218,10 @@ function pollSelectedRuntimeUntilSettled(requestId) {
 
 async function loadTraceList() {
   const response = await fetch("/api/traces");
-  const payload = await response.json();
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw responseError(payload, "Could not load example prompts");
+  }
 
   traceSelect.replaceChildren(
     ...payload.traces.map((trace) => {
@@ -186,7 +237,11 @@ async function loadTraceList() {
 
 async function loadSelectedTrace() {
   const response = await fetch(`/api/traces/${traceSelect.value}`);
-  selectedTrace = await response.json();
+  const payload = await readJsonResponse(response);
+  if (!response.ok) {
+    throw responseError(payload, "Could not load the selected example prompt");
+  }
+  selectedTrace = payload;
   currentTrace = selectedTrace;
   resetDemo();
   resetPromptToTrace();
@@ -251,6 +306,15 @@ function renderCandidates(step) {
     ...step.candidates.map((candidate) => {
       const row = document.createElement("div");
       row.className = candidate.token === step.selected_token ? "candidate selected" : "candidate";
+      row.setAttribute("role", "listitem");
+
+      const percentageValue = Math.round(candidate.probability * 100);
+      const tokenLabel = candidate.token.trim() || "whitespace token";
+      const selectedLabel = candidate.token === step.selected_token ? ", selected" : "";
+      row.setAttribute("aria-label", `${tokenLabel}, ${percentageValue} percent${selectedLabel}`);
+      if (candidate.token === step.selected_token) {
+        row.setAttribute("aria-current", "true");
+      }
 
       const label = document.createElement("span");
       label.className = "candidate-token";
@@ -261,12 +325,13 @@ function renderCandidates(step) {
 
       const bar = document.createElement("span");
       bar.className = "bar";
-      bar.style.width = `${Math.round(candidate.probability * 100)}%`;
+      bar.style.width = `${percentageValue}%`;
+      bar.setAttribute("aria-hidden", "true");
       barWrap.append(bar);
 
       const probability = document.createElement("span");
       probability.className = "probability";
-      probability.textContent = `${Math.round(candidate.probability * 100)}%`;
+      probability.textContent = `${percentageValue}%`;
 
       row.append(label, barWrap, probability);
       return row;
@@ -289,6 +354,11 @@ function trailDelayMs() {
 
 function scheduleNextStep() {
   clearTimeout(timer);
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    timer = null;
+    updatePlayButton();
+    return;
+  }
   timer = setTimeout(runStep, trailDelayMs());
   updatePlayButton();
 }
@@ -324,6 +394,27 @@ function updateReplayNavigator() {
   generationPositionOutput.value = `${Math.min(stepIndex, totalSteps)} / ${totalSteps} tokens`;
 }
 
+function renderTraceMeta() {
+  if (!trailStarted || !currentTrace) {
+    traceMeta.hidden = true;
+    traceMeta.textContent = "";
+    return;
+  }
+
+  const tokens = currentTrace.steps.length;
+  if (currentTrace.mode === "modeldeck-live-trace") {
+    const parts = ["Live trace", currentTrace.model, `${tokens} tokens`].filter(Boolean);
+    const totalSeconds = currentTrace.metrics?.total_seconds;
+    if (Number.isFinite(totalSeconds)) {
+      parts.push(`${Number(totalSeconds).toFixed(1)} s generation time`);
+    }
+    traceMeta.textContent = parts.join(" · ");
+  } else {
+    traceMeta.textContent = `Prepared replay · ${tokens} tokens`;
+  }
+  traceMeta.hidden = false;
+}
+
 function stopPlayback() {
   clearTimeout(timer);
   timer = null;
@@ -350,6 +441,7 @@ async function generateTrace() {
   activeGenerationRequestId = requestId;
   activeGenerationController = controller;
   generationInProgress = true;
+  startGenerationElapsed();
   updatePlayButton();
   const body = { runtime_id: currentRuntime.id, trace_id: traceSelect.value, request_id: requestId };
   if (canEditPrompt()) {
@@ -363,8 +455,12 @@ async function generateTrace() {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    const payload = await response.json();
+    const payload = await readJsonResponse(response);
     controller.signal.throwIfAborted();
+
+    if (!response.ok && payload.mode !== "modeldeck-unavailable") {
+      throw responseError(payload, `Live trace request failed (${response.status})`);
+    }
 
     return payload;
   } finally {
@@ -372,9 +468,33 @@ async function generateTrace() {
       activeGenerationRequestId = null;
       activeGenerationController = null;
       generationInProgress = false;
+      stopGenerationElapsed();
       updatePlayButton();
     }
   }
+}
+
+function updateGenerationElapsed() {
+  if (generationStartedAt === null) {
+    return;
+  }
+  const elapsedSeconds = Math.max(0, Math.floor((performance.now() - generationStartedAt) / 1000));
+  generationElapsed.textContent = `Generating live trace… ${elapsedSeconds} s`;
+}
+
+function startGenerationElapsed() {
+  clearInterval(generationElapsedTimer);
+  generationStartedAt = performance.now();
+  generationElapsed.hidden = false;
+  updateGenerationElapsed();
+  generationElapsedTimer = setInterval(updateGenerationElapsed, 1000);
+}
+
+function stopGenerationElapsed() {
+  clearInterval(generationElapsedTimer);
+  generationElapsedTimer = null;
+  generationStartedAt = null;
+  generationElapsed.hidden = true;
 }
 
 function cancelActiveGeneration() {
@@ -416,6 +536,8 @@ function showLiveUnavailable(payload) {
 
 async function startDemo() {
   if (timer) {
+    stopPlayback();
+    explanation.textContent = "Trail paused. Use Continue trail or the generation position control.";
     return;
   }
   if (isSelectedRuntimeLoading()) {
@@ -464,6 +586,7 @@ function startPreparedTrail() {
   }
 
   trailStarted = true;
+  renderTraceMeta();
   updateReplayNavigator();
   runStep();
 }
@@ -480,6 +603,7 @@ function resetDemo({ restoreSelectedTrace = false } = {}) {
   runNotice = "";
   candidateList.replaceChildren();
   generatedText.textContent = "";
+  renderTraceMeta();
   explanation.textContent = isLiveRuntimeUnavailable()
     ? currentRuntime.notes
     : "Press start to see candidate tokens appear step by step.";
@@ -506,6 +630,13 @@ runtimeSelect.addEventListener("change", () => {
   selectRuntime().catch((error) => {
     explanation.textContent = `Could not switch runtime: ${error}`;
   });
+});
+retryRuntimeButton.addEventListener("click", retryRuntimeStatus);
+cancelButton.addEventListener("click", () => {
+  if (cancelActiveGeneration()) {
+    cancelButton.disabled = true;
+    explanation.textContent = "Cancelling the live trace request...";
+  }
 });
 promptInput.addEventListener("input", () => {
   if (canEditPrompt()) {
@@ -541,5 +672,6 @@ resetButton.addEventListener("click", () => {
 });
 
 Promise.all([loadRuntimeOptions(), loadTraceList()]).catch((error) => {
-  explanation.textContent = `Could not load demo data: ${error}`;
+  retryRuntimeButton.hidden = false;
+  explanation.textContent = `Could not load demo data: ${error.message || error}. Refresh the runtime or reload the page.`;
 });

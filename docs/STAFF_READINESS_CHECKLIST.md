@@ -9,8 +9,8 @@
 5. Confirm readiness in Token Trail matches ModelDeck; Token Trail must not start or warm a worker.
 6. Enter a short prompt with a ready alias and confirm the replay reaches a complete sentence.
 7. Confirm Reset restores the selected prepared trace and scripted mode hides the prompt editor.
-8. Make the route provider unavailable in ModelDeck and confirm Token Trail reports it as not ready.
-9. Reset during generation and confirm ModelDeck receives cancellation; an acknowledgement is not proof the Worker has stopped. No late response should start a replay.
+8. Make the route provider unavailable in ModelDeck, confirm Token Trail reports it as not ready, then use Refresh runtime to recover after restoring it.
+9. Use Cancel generation during a pending request and confirm ModelDeck receives cancellation; an acknowledgement is not proof the Worker has stopped. No late response should start a replay.
 10. Confirm scripted mode still works when ModelDeck is unavailable.
 
 ## Go/no-go

@@ -64,7 +64,10 @@ Each browser request supplies a bounded request ID. Resetting during generation 
 
 - Live output is trimmed to the first complete sentence after at least eight generated steps.
 - Once a trail starts, visitors can pause and scrub backwards or forwards through its generated tokens.
+- Visitors who prefer reduced motion advance the trail one token at a time instead of using autoplay.
 - Candidate bars are top returned alternatives from the local model, not private reasoning.
+- Live requests show elapsed time and provide an explicit cancellation control; completed trails identify their mode, model, token count and available generation time.
+- An unavailable ModelDeck runtime provides an in-page status refresh action.
 - Gateway, route, local readiness, cancellation and invalid-metadata states are reported distinctly without presenting prepared output as a live result.
 - Visitor prompts and generated responses are not stored by default.
 

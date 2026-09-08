@@ -17,7 +17,7 @@ def test_web_app_keeps_selected_trace_separate_from_live_replay_trace() -> None:
     app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
     assert "let selectedTrace = null;" in app_js
-    assert "selectedTrace = await response.json();" in app_js
+    assert "selectedTrace = payload;" in app_js
     assert "currentTrace = selectedTrace;" in app_js
     assert "resetDemo({ restoreSelectedTrace: true })" in app_js
     assert "currentTrace = payload.trace;" in app_js
@@ -130,6 +130,11 @@ def test_web_app_disables_generation_while_selected_model_loads() -> None:
     assert "isLiveRuntimeUnavailable()" in app_js
     assert "isSelectedRuntimeLoading() || generationInProgress || isLiveRuntimeUnavailable()" in app_js
     assert "runtimeSelect.disabled = Boolean(timer) || generationInProgress;" in app_js
+    loading_body = app_js.split("function isSelectedRuntimeLoading()", 1)[1].split(
+        "async function retryRuntimeStatus", 1
+    )[0]
+    assert 'currentRuntime.status === "loading"' in loading_body
+    assert "return false;" not in loading_body
 
 
 def test_web_app_has_trail_speed_control() -> None:
@@ -203,7 +208,10 @@ def test_web_app_uses_speed_presets_and_timeout_replay_loop() -> None:
     assert "normal: 1500" in app_js
     assert "fast: 700" in app_js
     assert "setTimeout(runStep, trailDelayMs())" in app_js
-    assert "setInterval(" not in app_js
+    replay_scheduler = app_js.split("function scheduleNextStep", 1)[1].split(
+        "function renderGenerationPosition", 1
+    )[0]
+    assert "setInterval(" not in replay_scheduler
     assert "payload.mode === \"live\"" not in app_js
     assert "showLiveGeneration" not in app_js
 
@@ -227,6 +235,58 @@ def test_candidate_labels_do_not_overlap_probability_bars() -> None:
     assert ".candidate-token {" in styles_css
     assert "overflow-wrap: anywhere;" in styles_css
     assert ".bar-wrap {" in styles_css
+
+
+def test_demo_explains_probabilities_and_labels_dynamic_content() -> None:
+    index_html = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert "Top alternatives returned by the local model" in index_html
+    assert "not factual certainty" in index_html
+    assert 'for="promptInput">Edit prompt</label>' in index_html
+    assert 'id="candidateList"' in index_html and 'role="list"' in index_html
+    assert 'id="generatedText"' in index_html and 'aria-live="polite"' in index_html
+    assert 'row.setAttribute("role", "listitem")' in app_js
+    assert 'row.setAttribute("aria-label"' in app_js
+
+
+def test_demo_has_explicit_retry_cancel_progress_and_trace_metadata() -> None:
+    index_html = (PROJECT_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="cancelButton"' in index_html
+    assert 'id="retryRuntimeButton"' in index_html
+    assert 'id="generationElapsed"' in index_html
+    assert 'id="traceMeta"' in index_html
+    assert 'retryRuntimeButton.addEventListener("click", retryRuntimeStatus)' in app_js
+    assert 'cancelButton.addEventListener("click"' in app_js
+    assert "startGenerationElapsed();" in app_js
+    assert 'parts = ["Live trace", currentTrace.model, `${tokens} tokens`]' in app_js
+
+
+def test_play_button_pauses_autoplay_and_reduced_motion_uses_manual_steps() -> None:
+    app_js = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert 'playButton.textContent = "Pause trail";' in app_js
+    start_body = app_js.split("async function startDemo()", 1)[1].split(
+        "function startPreparedTrail", 1
+    )[0]
+    assert "if (timer)" in start_body
+    assert "stopPlayback();" in start_body
+    scheduler_body = app_js.split("function scheduleNextStep", 1)[1].split(
+        "function renderGenerationPosition", 1
+    )[0]
+    assert 'matchMedia("(prefers-reduced-motion: reduce)")' in scheduler_body
+
+
+def test_demo_has_responsive_controls_and_visible_keyboard_focus() -> None:
+    styles_css = (PROJECT_ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 1000px)" in styles_css
+    assert "@media (max-width: 700px)" in styles_css
+    assert "button:focus-visible" in styles_css
+    assert "select:focus-visible" in styles_css
+    assert "@media (prefers-reduced-motion: reduce)" in styles_css
 
 
 def test_reset_and_late_cancelled_response_behaviour():
@@ -260,8 +320,13 @@ const fetch = (url, options) => {
 let timer = null, selectedTrace = {prompt: "curated"}, currentTrace = {prompt: "live"};
 let generatedTokens = ["live"], stepIndex = 1, trailStarted = true, runNotice = "live";
 const candidateList = {replaceChildren() {}}, generatedText = {}, explanation = {};
+const generationElapsed = {};
+let generationStartedAt = null, generationElapsedTimer = null;
 const isLiveRuntimeUnavailable = () => false;
 const updateReplayNavigator = () => {};
+const renderTraceMeta = () => {};
+const readJsonResponse = response => response.json();
+const responseError = (_payload, fallback) => new Error(fallback);
 let renderedPrompt;
 const renderPrompt = () => { renderedPrompt = currentTrace.prompt; };
 '''

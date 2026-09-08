@@ -15,7 +15,7 @@
     </header>
 
     <section class="controls" aria-label="Demo controls">
-      <label for="traceSelect">Curated prompt</label>
+      <label for="traceSelect">Example prompt</label>
       <select id="traceSelect"></select>
 
       <label for="runtimeSelect">Runtime</label>
@@ -29,12 +29,16 @@
       </select>
 
       <button id="playButton" type="button">Start trail</button>
+      <button id="cancelButton" class="secondary-button" type="button" hidden>Cancel generation</button>
+      <button id="retryRuntimeButton" class="secondary-button" type="button" hidden>Refresh runtime</button>
       <button id="resetButton" type="button">Reset</button>
+      <span id="generationElapsed" class="generation-elapsed" role="status" aria-live="polite" hidden></span>
     </section>
 
     <section class="panel prompt-panel">
       <h2>1. Prompt</h2>
       <p id="promptText"></p>
+      <label class="visually-hidden" for="promptInput">Edit prompt</label>
       <textarea id="promptInput" class="prompt-input" rows="3" maxlength="500" hidden></textarea>
       <div id="promptTokens" class="token-row" aria-label="Prompt tokens"></div>
     </section>
@@ -42,12 +46,14 @@
     <section class="grid">
       <article class="panel">
         <h2>2. Next-token prediction</h2>
-        <div id="candidateList" class="candidate-list"></div>
+        <p class="panel-intro">Top alternatives returned by the local model. Percentages show relative next-token probability, not factual certainty.</p>
+        <div id="candidateList" class="candidate-list" role="list" aria-live="polite" aria-atomic="true"></div>
       </article>
 
       <article class="panel generated-panel">
         <h2>3. Generated text</h2>
-        <p id="generatedText" class="generated-text"></p>
+        <p id="generatedText" class="generated-text" aria-live="polite" aria-atomic="true"></p>
+        <p id="traceMeta" class="trace-meta" hidden></p>
         <div class="replay-navigator">
           <div class="replay-navigator-labels">
             <label for="generationPosition">Generation position</label>
@@ -55,12 +61,12 @@
           </div>
           <input id="generationPosition" class="generation-position" type="range" min="0" max="0" value="0" step="1" disabled>
         </div>
-        <p id="explanation" class="explanation">Choose a prompt and start the trail.</p>
+        <p id="explanation" class="explanation" role="status" aria-live="polite">Choose an example prompt and start the trail.</p>
       </article>
     </section>
 
     <footer class="notice">
-      This demo shows an observable generation process. It does not show private model reasoning.
+      This demo shows an observable generation process, not private model reasoning. Custom prompts are sent only to the configured local ModelDeck service and are not stored by Token Trail.
     </footer>
   </main>
 
