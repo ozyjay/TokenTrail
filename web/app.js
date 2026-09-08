@@ -111,6 +111,8 @@ function runtimeStatusLabel(option) {
       return "gateway unavailable";
     case "route_not_advertised":
       return "route not advertised";
+    case "incompatible_contract":
+      return "incompatible trace contract";
     case "provider_not_ready":
       return "local provider not ready";
     default:
@@ -362,6 +364,7 @@ async function generateTrace() {
       signal: controller.signal,
     });
     const payload = await response.json();
+    controller.signal.throwIfAborted();
 
     return payload;
   } finally {

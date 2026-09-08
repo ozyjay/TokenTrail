@@ -45,11 +45,14 @@ class FakeModelDeckAdapter:
         self.generate_calls = []
         self.cancel_calls = []
 
-    def models(self, *, timeout_seconds: float) -> dict:
+    def capabilities(self, *, timeout_seconds: float) -> dict:
         return {
-            "object": "list",
-            "data": [
-                {"id": model, "object": "model", "owned_by": "modeldeck-local", "ready": model in self.ready}
+            "resolution": {},
+            "capabilities": [
+                {"id": f"uuid-{model}", "display_name": model, "public_name": model,
+                 "protocol_contract": "native-ar-trace-v1",
+                 "surfaces": ["POST /native/v1/autoregressive/traces"],
+                 "metadata": {}, "ready": model in self.ready}
                 for model in self.gateway_order
             ],
         }
@@ -60,7 +63,7 @@ class FakeModelDeckAdapter:
             raise ModelDeckError(
                 "ModelDeck request failed",
                 code=self.error_code,
-                http_status=503 if self.error_code == "local_provider_unavailable" else 502,
+                http_status=503 if self.error_code in {"local_provider_unavailable", "local_route_unavailable"} else 502,
             )
         return {
             "mode": "modeldeck-live-trace",
@@ -87,7 +90,7 @@ class FakeModelDeckAdapter:
 
     def cancel(self, request_id: str, *, timeout_seconds: float) -> dict:
         self.cancel_calls.append((request_id, timeout_seconds))
-        return {"ok": True, "request_id": request_id}
+        return {"ok": True, "request_id": request_id, "state": "cancelled", "worker_id": "worker-uuid"}
 
 
 @contextmanager
@@ -104,15 +107,15 @@ def running_server(config: RuntimeConfig, adapter: FakeModelDeckAdapter):
         thread.join(timeout=5)
 
 
-def test_runtime_endpoint_lists_all_aliases_in_gateway_order() -> None:
+def test_runtime_endpoint_lists_all_aliases_in_configuration_order() -> None:
     with running_server(make_config(), FakeModelDeckAdapter()) as base_url:
         payload = _get_json(f"{base_url}/api/runtime")
 
     assert payload["selected_id"] == "modeldeck:qwen-1-5b"
     assert [option["model"] for option in payload["options"][1:]] == [
-        "qwen-3b",
         "qwen-0-5b",
         "qwen-1-5b",
+        "qwen-3b",
     ]
     assert all(option["status"] == "ready" for option in payload["options"][1:])
 
@@ -288,3 +291,59 @@ def _post_json_with_status(url: str, payload: dict) -> tuple[dict, int]:
             return json.loads(response.read().decode("utf-8")), response.status
     except HTTPError as error:
         return json.loads(error.read().decode("utf-8")), error.code
+
+
+def test_discovery_filters_extra_aliases_and_retains_missing_configured_alias():
+    adapter = FakeModelDeckAdapter(gateway_order=("unconfigured", "qwen-3b", "qwen-0-5b"))
+    state = build_server_state(make_config(), modeldeck_adapter=adapter)
+    assert [option.model for option in state.runtime_options[1:]] == ["qwen-0-5b", "qwen-1-5b", "qwen-3b"]
+    assert state.runtime_options[2].status == "route_not_advertised"
+    assert state.runtime_state.selected_id == "modeldeck:qwen-1-5b"
+
+
+def test_gateway_failure_keeps_explicit_selection_and_prepared_option():
+    class UnavailableAdapter(FakeModelDeckAdapter):
+        def capabilities(self, **kwargs):
+            raise ModelDeckError("connection refused", code="gateway_unavailable")
+    state = build_server_state(make_config(), modeldeck_adapter=UnavailableAdapter())
+    assert state.runtime_options[0].available
+    assert all(option.status == "gateway_unavailable" for option in state.runtime_options[1:])
+
+
+@pytest.mark.parametrize("gateway_state", ["not-found", "worker-unavailable"])
+def test_cancellation_preserves_unsuccessful_gateway_acknowledgement(gateway_state):
+    class CancelAdapter(FakeModelDeckAdapter):
+        def cancel(self, request_id, **kwargs):
+            return {"ok": False, "request_id": request_id, "state": gateway_state, "worker_id": "worker-uuid"}
+    with running_server(make_config(), CancelAdapter()) as base_url:
+        payload = _post_json(f"{base_url}/api/generate-trace/cancel", {"request_id": "cancel-1"})
+    assert payload["cancelled"] is False
+    assert payload["gateway_state"] == gateway_state
+    assert payload["worker_id"] == "worker-uuid"
+
+
+def test_current_local_route_error_does_not_claim_worker_is_stopped():
+    with running_server(make_config(), FakeModelDeckAdapter(error_code="local_route_unavailable")) as base_url:
+        payload, status = _post_json_with_status(f"{base_url}/api/generate-trace", {
+            "runtime_id": "modeldeck:qwen-1-5b", "trace_id": "robot-university", "request_id": "route-1"})
+    assert status == 503
+    assert payload["state"] == "route_unavailable"
+    assert payload["fallback_used"] is False
+    assert "trace" not in payload
+
+
+def test_incompatible_capability_cannot_generate():
+    class IncompatibleAdapter(FakeModelDeckAdapter):
+        def capabilities(self, **kwargs):
+            payload = super().capabilities(**kwargs)
+            for entry in payload["capabilities"]:
+                entry.pop("protocol_contract")
+            return payload
+    adapter = IncompatibleAdapter()
+    with running_server(make_config(), adapter) as base_url:
+        payload, status = _post_json_with_status(f"{base_url}/api/generate-trace", {
+            "runtime_id": "modeldeck:qwen-1-5b", "trace_id": "robot-university", "request_id": "incompatible-1"})
+    assert status == 503
+    assert payload["state"] == "incompatible_contract"
+    assert "trace" not in payload
+    assert adapter.generate_calls == []

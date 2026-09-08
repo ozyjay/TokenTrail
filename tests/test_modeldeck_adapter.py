@@ -1,5 +1,7 @@
 import io
 import json
+
+import pytest
 from urllib.error import HTTPError, URLError
 
 from token_trail.adapters.base import AdapterError
@@ -22,23 +24,18 @@ class FakeResponse:
 
 
 def model_list(*, ready: bool = True, include_requested: bool = True) -> dict:
-    data = [
-        {"id": "qwen-0-5b", "object": "model", "owned_by": "modeldeck-local", "ready": True},
-        {"id": "qwen-1-5b", "object": "model", "owned_by": "modeldeck-local", "ready": False},
-        {"id": "qwen-3b", "object": "model", "owned_by": "modeldeck-local", "ready": True},
-    ]
+    names = [("qwen-0-5b", True), ("qwen-1-5b", False), ("qwen-3b", True)]
     if include_requested:
-        data.append(
-            {
-                "id": "token-explainer",
-                "object": "model",
-                "owned_by": "modeldeck-local",
-                "ready": ready,
-            }
-        )
+        names.append(("token-explainer", ready))
     return {
-        "object": "list",
-        "data": data,
+        "capabilities": [
+            {"id": f"capability-uuid-{index}", "display_name": name,
+             "public_name": name, "protocol_contract": "native-ar-trace-v1",
+             "surfaces": ["POST /native/v1/autoregressive/traces"],
+             "ready": is_ready, "metadata": {}}
+            for index, (name, is_ready) in enumerate(names)
+        ],
+        "resolution": {},
     }
 
 
@@ -83,14 +80,14 @@ def test_models_uses_modeldeck_gateway_contract() -> None:
         calls.append((request.full_url, request.get_method(), timeout))
         return FakeResponse(model_list())
 
-    payload = ModelDeckAdapter("http://127.0.0.1:8600", opener=opener).models(timeout_seconds=3)
+    payload = ModelDeckAdapter("http://127.0.0.1:8600", opener=opener).capabilities(timeout_seconds=3)
 
-    assert [entry["id"] for entry in payload["data"][:3]] == [
+    assert [entry["public_name"] for entry in payload["capabilities"][:3]] == [
         "qwen-0-5b",
         "qwen-1-5b",
         "qwen-3b",
     ]
-    assert calls == [("http://127.0.0.1:8600/v1/models", "GET", 3.0)]
+    assert calls == [("http://127.0.0.1:8600/native/v1/capabilities", "GET", 3.0)]
 
 
 def test_status_reports_alias_readiness_without_warming_worker() -> None:
@@ -145,7 +142,7 @@ def test_generate_trace_sends_messages_and_converts_native_events() -> None:
     )
 
     url, body, timeout = calls[0]
-    assert url == "http://127.0.0.1:8600/native/autoregressive/trace"
+    assert url == "http://127.0.0.1:8600/native/v1/autoregressive/traces"
     assert body["request_id"] == "trace-123"
     assert body["model"] == "token-explainer"
     assert body["messages"] == [
@@ -337,7 +334,7 @@ def test_modeldeck_errors_remain_local_and_actionable() -> None:
         )
 
     try:
-        ModelDeckAdapter("http://127.0.0.1:8600", opener=opener).models()
+        ModelDeckAdapter("http://127.0.0.1:8600", opener=opener).capabilities()
     except ModelDeckError as error:
         assert "No ready local provider" in str(error)
         assert error.code == "local_provider_unavailable"
@@ -373,3 +370,67 @@ def test_cancel_uses_stable_gateway_request_route() -> None:
     assert calls == [
         ("http://127.0.0.1:8600/v1/requests/trace-123/cancel", "POST", 4.0)
     ]
+
+
+@pytest.mark.parametrize("contract,surfaces", [
+    (None, ["POST /native/v1/autoregressive/traces"]),
+    ("text-diffusion-v1", ["POST /native/v1/autoregressive/traces"]),
+    ("native-ar-trace-v1", None),
+    ("native-ar-trace-v1", ["POST /native/autoregressive/trace"]),
+])
+def test_incompatible_contract_is_not_ready(contract, surfaces):
+    payload = model_list()
+    entry = payload["capabilities"][-1]
+    entry["protocol_contract"] = contract
+    entry["surfaces"] = surfaces
+    adapter = ModelDeckAdapter("http://127.0.0.1:8600", opener=lambda request, timeout: FakeResponse(payload))
+    status = adapter.status(model="token-explainer")
+    assert status.state == "incompatible_contract"
+    assert not status.available
+
+
+def test_native_alias_does_not_need_an_openai_model_entry():
+    calls = []
+    def opener(request, timeout):
+        calls.append(request.full_url)
+        if request.full_url.endswith("/v1/models"):
+            return FakeResponse({"object": "list", "data": []})
+        return FakeResponse(model_list())
+    status = ModelDeckAdapter("http://127.0.0.1:8600", opener=opener).status(model="token-explainer")
+    assert status.available
+    assert calls == ["http://127.0.0.1:8600/native/v1/capabilities"]
+
+
+@pytest.mark.parametrize("payload", [{}, {"data": []}, {"capabilities": None},
+                                      {"capabilities": [{"public_name": "token-explainer", "ready": "false"}]}])
+def test_malformed_discovery_is_not_missing_publication(payload):
+    adapter = ModelDeckAdapter("http://127.0.0.1:8600", opener=lambda request, timeout: FakeResponse(payload))
+    assert adapter.status(model="token-explainer").state == "gateway_unavailable"
+
+
+@pytest.mark.parametrize("field,value", [
+    ("selected", {"token_id": True, "token": "Token", "probability": 0.7}),
+    ("selected", {"token_id": 0, "token": "Token", "probability": float("nan")}),
+    ("alternatives", [{"token_id": 10, "token": "bad", "probability": 1.1}]),
+    ("generated_token_ids", [99]), ("timestamp", "yesterday"),
+    ("elapsed_seconds", -1), ("step", True),
+])
+def test_malformed_native_events_are_rejected(field, value):
+    payload = native_trace()
+    payload["events"][0][field] = value
+    adapter = ModelDeckAdapter("http://127.0.0.1:8600", opener=lambda request, timeout: FakeResponse(payload))
+    with pytest.raises(ModelDeckError) as failure:
+        adapter.generate_trace(prompt="Explain token prediction.", instructions=None, model="token-explainer",
+                               max_new_tokens=64, top_k=5, temperature=0.3, timeout_seconds=20, request_id="request-1")
+    assert failure.value.code == "invalid_worker_trace_metadata"
+
+
+@pytest.mark.parametrize("at_event", [False, True])
+def test_cancelled_trace_cannot_be_replayed(at_event):
+    payload = native_trace()
+    (payload["events"][-1] if at_event else payload)["cancelled"] = True
+    adapter = ModelDeckAdapter("http://127.0.0.1:8600", opener=lambda request, timeout: FakeResponse(payload))
+    with pytest.raises(ModelDeckError) as failure:
+        adapter.generate_trace(prompt="Explain token prediction.", instructions=None, model="token-explainer",
+                               max_new_tokens=64, top_k=5, temperature=0.3, timeout_seconds=20, request_id="request-1")
+    assert failure.value.code == "request_cancelled"

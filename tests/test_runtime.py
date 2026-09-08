@@ -17,7 +17,7 @@ def test_build_runtime_options_includes_only_scripted_by_default() -> None:
     assert [option.id for option in options] == ["scripted:prepared-traces"]
 
 
-def test_build_runtime_options_keeps_gateway_model_order() -> None:
+def test_build_runtime_options_keeps_configured_model_order() -> None:
     config = make_config()
     config = RuntimeConfig(
         **{
@@ -43,12 +43,12 @@ def test_build_runtime_options_keeps_gateway_model_order() -> None:
 
     assert [option.id for option in options] == [
         "scripted:prepared-traces",
-        "modeldeck:qwen-3b",
         "modeldeck:qwen-0-5b",
         "modeldeck:qwen-1-5b",
+        "modeldeck:qwen-3b",
     ]
     assert default_runtime_id(config, options) == "modeldeck:qwen-1-5b"
-    assert options[1].status == "ready"
+    assert options[2].status == "ready"
     assert options[0].available
 
 

@@ -227,3 +227,63 @@ def test_candidate_labels_do_not_overlap_probability_bars() -> None:
     assert ".candidate-token {" in styles_css
     assert "overflow-wrap: anywhere;" in styles_css
     assert ".bar-wrap {" in styles_css
+
+
+def test_reset_and_late_cancelled_response_behaviour():
+    import shutil
+    import subprocess
+
+    import pytest
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("Node.js is required for browser behaviour checks")
+    app = (PROJECT_ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    generate = app.split("async function generateTrace()", 1)[1].split("function cancelActiveGeneration", 1)[0]
+    cancel = app.split("function cancelActiveGeneration()", 1)[1].split("function showModelDeckLiveTrace", 1)[0]
+    reset = app.split("function resetDemo(", 1)[1].split("function buttonLabelForRuntime", 1)[0]
+    harness = r'''
+const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
+let activeGenerationRequestId, activeGenerationController, generationInProgress;
+let currentRuntime = {id: "modeldeck:qwen-1-5b"};
+const traceSelect = {value: "prepared"};
+const updatePlayButton = () => {};
+const canEditPrompt = () => false;
+let resolveResponse;
+const calls = [];
+const fetch = (url, options) => {
+  calls.push({url, options});
+  if (url.endsWith("/cancel")) return Promise.resolve({});
+  return new Promise(resolve => { resolveResponse = resolve; });
+};
+let timer = null, selectedTrace = {prompt: "curated"}, currentTrace = {prompt: "live"};
+let generatedTokens = ["live"], stepIndex = 1, trailStarted = true, runNotice = "live";
+const candidateList = {replaceChildren() {}}, generatedText = {}, explanation = {};
+const isLiveRuntimeUnavailable = () => false;
+const updateReplayNavigator = () => {};
+let renderedPrompt;
+const renderPrompt = () => { renderedPrompt = currentTrace.prompt; };
+'''
+    harness += "async function generateTrace()" + generate
+    harness += "function cancelActiveGeneration()" + cancel
+    harness += "function resetDemo(" + reset
+    harness += r'''
+(async () => {
+  const pending = generateTrace();
+  const requestId = activeGenerationRequestId;
+  assert.equal(cancelActiveGeneration(), true);
+  resetDemo({restoreSelectedTrace: true});
+  assert.equal(currentTrace, selectedTrace);
+  assert.equal(renderedPrompt, "curated");
+  assert.equal(trailStarted, false);
+  assert.deepEqual(generatedTokens, []);
+  assert.equal(JSON.parse(calls[1].options.body).request_id, requestId);
+  // Simulate a response arriving despite the browser abort.
+  resolveResponse({json: async () => ({mode: "modeldeck-live-trace"})});
+  await assert.rejects(pending, {name: "AbortError"});
+  assert.equal(generationInProgress, false);
+  assert.equal(activeGenerationRequestId, null);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+'''
+    subprocess.run([node, "-e", harness], check=True, capture_output=True, text=True)

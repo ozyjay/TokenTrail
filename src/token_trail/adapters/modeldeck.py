@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Callable
@@ -52,35 +53,18 @@ class ModelDeckAdapter:
 
     def status(self, *, model: str, timeout_seconds: float = 2.0, **_: Any) -> ModelDeckStatus:
         try:
-            models = self.models(timeout_seconds=timeout_seconds)
+            capabilities = self.capabilities(timeout_seconds=timeout_seconds)
         except ModelDeckError as error:
             return ModelDeckStatus(available=False, state="gateway_unavailable", error=str(error))
 
-        entry = next((item for item in models["data"] if item["id"] == model), None)
-        if entry is None:
-            return ModelDeckStatus(
-                available=False,
-                state="route_not_advertised",
-                error=f"ModelDeck does not advertise the '{model}' demo route.",
-            )
-        ready = bool(entry["ready"])
-        if not ready:
-            return ModelDeckStatus(
-                available=False,
-                state="provider_not_ready",
-                error=(
-                    "This model is configured in ModelDeck but its worker is not ready. "
-                    "Start it from the ModelDeck Workers view."
-                ),
-            )
-        return ModelDeckStatus(available=True, state="ready", error="ModelDeck trace route is ready.")
+        return capability_status(capabilities, model)
 
-    def models(self, *, timeout_seconds: float = 2.0) -> dict:
-        request = Request(_gateway_url(self.gateway_url, "/v1/models"), method="GET")
-        payload = self._request_json(request, timeout_seconds, "model discovery")
-        if not _is_valid_models_payload(payload):
+    def capabilities(self, *, timeout_seconds: float = 2.0) -> dict:
+        request = Request(_gateway_url(self.gateway_url, "/native/v1/capabilities"), method="GET")
+        payload = self._request_json(request, timeout_seconds, "native capability discovery")
+        if not _is_valid_capabilities_payload(payload):
             raise ModelDeckError(
-                "ModelDeck model discovery returned an unexpected response",
+                "ModelDeck native capability discovery returned an unexpected response",
                 code="gateway_invalid_response",
             )
         return payload
@@ -115,7 +99,7 @@ class ModelDeckAdapter:
             "stream": False,
         }
         request = Request(
-            _gateway_url(self.gateway_url, "/native/autoregressive/trace"),
+            _gateway_url(self.gateway_url, "/native/v1/autoregressive/traces"),
             data=json.dumps(body).encode("utf-8"),
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -184,6 +168,8 @@ def _convert_trace(payload: Any, *, prompt: str, model: str) -> dict:
         isinstance(event, dict) and event.get("cancelled") is True for event in events
     ):
         raise ModelDeckError("ModelDeck trace request was cancelled.", code="request_cancelled")
+    for index, event in enumerate(events):
+        _validate_native_event(event, index)
     complete_index = next(
         (
             index
@@ -230,6 +216,39 @@ def _convert_trace(payload: Any, *, prompt: str, model: str) -> dict:
     if isinstance(metrics, dict):
         trace["metrics"] = metrics
     return trace
+
+
+def _validate_native_event(event: Any, index: int) -> None:
+    def token_metadata(token: Any) -> bool:
+        return (
+            isinstance(token, dict)
+            and _token_id(token.get("token_id"))
+            and isinstance(token.get("token"), str)
+            and _is_probability(token.get("probability"))
+        )
+
+    if not isinstance(event, dict):
+        raise ModelDeckError("Invalid trace event", code="invalid_worker_trace_metadata")
+    ids = event.get("generated_token_ids")
+    selected = event.get("selected")
+    alternatives = event.get("alternatives")
+    if not (
+        type(event.get("step")) is int and event["step"] == index
+        and token_metadata(selected)
+        and isinstance(alternatives, list) and all(token_metadata(item) for item in alternatives)
+        and isinstance(ids, list) and len(ids) == index + 1 and all(_token_id(item) for item in ids)
+        and ids[-1] == selected["token_id"]
+        and isinstance(event.get("text_so_far"), str)
+        and isinstance(event.get("complete"), bool)
+        and all(isinstance(event.get(key), (int, float)) and not isinstance(event[key], bool)
+                and math.isfinite(event[key]) and event[key] >= 0
+                for key in ("timestamp", "elapsed_seconds"))
+    ):
+        raise ModelDeckError("Invalid trace event metadata", code="invalid_worker_trace_metadata")
+
+
+def _token_id(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _convert_event(event: Any) -> dict:
@@ -312,6 +331,10 @@ def validate_trace_payload(trace: Any) -> None:
     user_prompt_tokens = trace.get("user_prompt_tokens")
     if not _aligned_token_metadata(trace.get("user_prompt_token_ids"), user_prompt_tokens):
         raise AdapterError("ModelDeck trace payload has invalid user prompt tokens")
+    if any(_GENERATED_CONTROL_TOKEN.search(token) for token in user_prompt_tokens):
+        raise ModelDeckError(
+            "ModelDeck user prompt contains control tokens", code="invalid_worker_trace_metadata"
+        )
     steps = trace.get("steps")
     if not isinstance(steps, list) or not steps:
         raise AdapterError("ModelDeck trace payload has no replay steps")
@@ -334,14 +357,44 @@ def validate_trace_payload(trace: Any) -> None:
             raise AdapterError("ModelDeck trace step is missing an explanation")
 
 
-def _is_valid_models_payload(payload: Any) -> bool:
-    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
+def capability_status(payload: dict, model: str) -> ModelDeckStatus:
+    """Resolve a configured public name without choosing a different model."""
+    entries = [entry for entry in payload["capabilities"] if entry["public_name"] == model]
+    if not entries:
+        return ModelDeckStatus(
+            False, "route_not_advertised",
+            f"ModelDeck does not publish the '{model}' native capability. Check publication in ModelDeck.",
+        )
+    if len(entries) != 1 or entries[0].get("protocol_contract") != "native-ar-trace-v1" or (
+        "POST /native/v1/autoregressive/traces" not in (entries[0].get("surfaces") or [])
+    ):
+        return ModelDeckStatus(
+            False, "incompatible_contract",
+            f"The '{model}' capability requires native-ar-trace-v1 and its canonical trace surface. "
+            "Check the published capability and ModelDeck version.",
+        )
+    if not entries[0]["ready"]:
+        return ModelDeckStatus(
+            False, "provider_not_ready",
+            "This capability is published but its Worker is stopped or not ready. "
+            "Check it in the ModelDeck Workers view.",
+        )
+    return ModelDeckStatus(True, "ready", "ModelDeck trace route is ready.")
+
+
+def _is_valid_capabilities_payload(payload: Any) -> bool:
+    if not isinstance(payload, dict) or not isinstance(payload.get("capabilities"), list):
         return False
     return all(
         isinstance(entry, dict)
-        and isinstance(entry.get("id"), str)
+        and isinstance(entry.get("public_name"), str)
+        and bool(entry["public_name"])
         and isinstance(entry.get("ready"), bool)
-        for entry in payload["data"]
+        and (entry.get("surfaces") is None or (
+            isinstance(entry["surfaces"], list)
+            and all(isinstance(surface, str) for surface in entry["surfaces"])
+        ))
+        for entry in payload["capabilities"]
     )
 
 

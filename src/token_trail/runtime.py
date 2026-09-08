@@ -59,7 +59,7 @@ def build_runtime_options(
 
     if config.modeldeck_enabled:
         statuses = modeldeck_statuses or {}
-        ordered_models = [*statuses, *(model for model in config.modeldeck_models if model not in statuses)]
+        ordered_models = config.modeldeck_models
         for model in ordered_models:
             status_payload = statuses.get(model, {})
             model_available = bool(status_payload.get("available", False))

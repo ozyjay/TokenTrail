@@ -38,7 +38,7 @@ poetry install
 
 - ModelDeck owns model discovery, worker lifecycle, warm-up, and GPU memory.
 - Token Trail must not start, warm, stop, or download model workers.
-- Discover ready aliases through ModelDeck `GET /v1/models` and request traces through `POST /native/autoregressive/trace`.
+- Discover ready aliases through ModelDeck `GET /native/v1/capabilities` and request traces through `POST /native/v1/autoregressive/traces`.
 
 ## Live Runtime UX
 
@@ -47,7 +47,7 @@ poetry install
 - Resetting or switching into scripted mode must re-render the curated prompt view, hide the prompt editor, and restore the selected prepared trace.
 - Available ModelDeck runtimes should expose an editable prompt box.
 - ModelDeck mode sends the fixed hidden instruction prompt from `config/instructions/modeldeck_default.txt` to keep public responses short and suitable for the demo.
-- ModelDeck traces should finish at a complete sentence or fall back to scripted mode if ModelDeck fails, is too slow, or is not ready.
+- ModelDeck traces should finish at a complete sentence or report a live failure if ModelDeck fails, is too slow, or is not ready. Prepared replay requires explicit selection.
 - Public wording should describe candidate bars as top returned alternatives from the local model, not private reasoning.
 - The generated output area should use available horizontal browser space and avoid forcing page-level scrolling for normal live output.
 - Do not store visitor prompts or generated responses by default.

@@ -24,8 +24,8 @@ def test_primary_docs_describe_external_modeldeck_ownership() -> None:
 
     readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
     assert "never starts, warms, stops or downloads models" in readme
-    assert "GET /v1/models" in readme
-    assert "POST /native/autoregressive/trace" in readme
+    assert "GET /native/v1/capabilities" in readme
+    assert "POST /native/v1/autoregressive/traces" in readme
 
 
 def test_modeldeck_public_route_and_config_are_documented() -> None:

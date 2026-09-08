@@ -16,6 +16,7 @@ from token_trail.adapters.modeldeck import (
     ModelDeckAdapter,
     ModelDeckError,
     ModelDeckStatus,
+    capability_status,
     validate_trace_payload,
 )
 from token_trail.config import DEFAULT_TOKEN_TRAIL_PORT, RuntimeConfig, load_config
@@ -250,6 +251,8 @@ class TokenTrailHandler(BaseHTTPRequestHandler):
                 "request_id": request_id,
                 "cancelled": result["ok"],
                 "state": "request_cancelled" if result["ok"] else "request_not_active",
+                "gateway_state": result.get("state"),
+                "worker_id": result.get("worker_id"),
             }
         )
 
@@ -308,36 +311,14 @@ def _modeldeck_statuses(config: RuntimeConfig, adapter: ModelDeckAdapter) -> dic
         return {}
 
     try:
-        payload = adapter.models(timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS)
+        payload = adapter.capabilities(timeout_seconds=MODELDECK_DISCOVERY_TIMEOUT_SECONDS)
     except ModelDeckError as error:
         return {
             model: ModelDeckStatus(False, "gateway_unavailable", str(error))
             for model in config.modeldeck_models
         }
 
-    configured = set(config.modeldeck_models)
-    statuses: dict[str, ModelDeckStatus] = {}
-    for entry in payload["data"]:
-        model = entry["id"]
-        if model not in configured:
-            continue
-        if entry["ready"]:
-            statuses[model] = ModelDeckStatus(True, "ready", "ModelDeck trace route is ready.")
-        else:
-            statuses[model] = ModelDeckStatus(
-                False,
-                "provider_not_ready",
-                "This model is configured in ModelDeck but its worker is not ready. "
-                "Start it from the ModelDeck Workers view.",
-            )
-    for model in config.modeldeck_models:
-        if model not in statuses:
-            statuses[model] = ModelDeckStatus(
-                False,
-                "route_not_advertised",
-                f"ModelDeck does not advertise the '{model}' route in the active demo set.",
-            )
-    return statuses
+    return {model: capability_status(payload, model) for model in config.modeldeck_models}
 
 
 def _runtime_status_payload(statuses: dict[str, ModelDeckStatus]) -> dict[str, dict]:
@@ -384,6 +365,7 @@ def _request_id_from_payload(payload: dict) -> str:
 def _request_error_state(code: str) -> str:
     return {
         "local_provider_unavailable": "provider_not_ready",
+        "local_route_unavailable": "route_unavailable",
         "invalid_worker_trace_metadata": "invalid_worker_trace_metadata",
         "request_cancelled": "request_cancelled",
         "gateway_unavailable": "gateway_unavailable",
@@ -393,11 +375,13 @@ def _request_error_state(code: str) -> str:
 def _live_error_message(state: str) -> str:
     messages = {
         "gateway_unavailable": "The ModelDeck gateway is unavailable. Check that ModelDeck is running.",
-        "route_not_advertised": "This model is not advertised by the active ModelDeck demo set.",
+        "route_not_advertised": "This native capability is not published in ModelDeck. Check its publication.",
+        "incompatible_contract": "This capability requires native-ar-trace-v1 and its canonical trace surface. Check ModelDeck publication and version.",
         "provider_not_ready": (
             "This model is configured in ModelDeck but its worker is not ready. "
             "Start it from the ModelDeck Workers view."
         ),
+        "route_unavailable": "The selected ModelDeck route cannot serve this request. Refresh readiness and check its publication, protocol and Workers in ModelDeck.",
         "request_cancelled": "The live ModelDeck trace request was cancelled.",
         "invalid_worker_trace_metadata": "ModelDeck returned invalid trace metadata; no live trace was shown.",
         "request_failed": "The live ModelDeck trace request failed; no prepared output was substituted.",

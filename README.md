@@ -9,7 +9,7 @@ Token Trail is an Open Day demo that replays next-token choices and their probab
 | `modeldeck:<alias>` | Live token traces from a configured ModelDeck demo route | Primary when the route is ready |
 | `scripted:prepared-traces` | Curated deterministic traces | Always available |
 
-The active “2026 OpenDay Demo” set exposes the public aliases `qwen-0-5b`, `qwen-1-5b` and `qwen-3b`. Token Trail reads `GET /v1/models`, keeps those aliases in gateway order and uses each route's `ready` field without assuming its worker is running. It sends bounded requests to `POST /native/autoregressive/trace` through the server-side adapter. ModelDeck owns route configuration, physical model selection, lifecycle and GPU memory; Token Trail never starts, warms, stops or downloads models and has no cloud fallback.
+The default configured public aliases are `qwen-0-5b`, `qwen-1-5b` and `qwen-3b`. Token Trail reads `GET /native/v1/capabilities`, keeps those aliases in configuration order and requires `native-ar-trace-v1`, the canonical trace surface and each capability's `ready` field without assuming its worker is running. It sends bounded requests to `POST /native/v1/autoregressive/traces` through the server-side adapter. ModelDeck owns route configuration, physical model selection, lifecycle and GPU memory; Token Trail never starts, warms, stops or downloads models and has no cloud fallback.
 
 ## Setup and run
 
@@ -26,7 +26,7 @@ Install Token Trail's Python environment:
 pwsh -NoProfile -File ./scripts/setup.ps1
 ```
 
-Open the ModelDeck management UI at <http://127.0.0.1:3600>, select the required worker for the active demo set and start it there. Then start Token Trail:
+For live use, publish the configured native trace capabilities in the intended ModelDeck installation and manage their Workers at <http://127.0.0.1:3600>. Token Trail can also start while ModelDeck is unavailable:
 
 ```powershell
 pwsh -NoProfile -File ./scripts/run.ps1
@@ -58,7 +58,7 @@ The fixed hidden instruction keeps public responses short and suitable for the d
 
 For live traces, Token Trail preserves ModelDeck's generated tokens, probabilities, returned alternatives, timing/metrics, complete prompt token metadata and user-prompt token metadata. The public prompt view uses only `user_prompt_tokens`; complete prompt tokens can contain hidden instructions or chat-template markers and are never rendered. Invalid or misaligned metadata, including model-control markers leaked into generated tokens or alternatives, is treated as `invalid_worker_trace_metadata` and is not shown as a successful trace.
 
-Each browser request supplies a bounded request ID. Resetting during generation aborts the browser request and forwards cancellation through ModelDeck's stable `POST /v1/requests/{request_id}/cancel` route. ModelDeck's structured `local_provider_unavailable` response is shown as a local readiness state. There is no cloud inference or model download path.
+Each browser request supplies a bounded request ID. Resetting during generation aborts the browser request and forwards cancellation through ModelDeck's stable `POST /v1/requests/{request_id}/cancel` route. ModelDeck's structured `local_route_unavailable` response reports that the selected route cannot serve the request; discovery distinguishes publication, contract and Worker readiness. Cancellation acknowledges intent; it does not prove the Worker has finished stopping. There is no cloud inference or model download path.
 
 ## Behaviour and privacy
 
@@ -73,3 +73,13 @@ Each browser request supplies a bounded request ID. Resetting during generation 
 ```powershell
 pwsh -NoProfile -File ./scripts/test.ps1
 ```
+
+Native discovery uses `{capabilities: [{id, display_name, public_name, protocol_contract, surfaces, ready, metadata}], resolution}`. Token Trail matches `public_name`, never the capability UUID. `/v1/models` intentionally omits native traces. Missing contracts or canonical surfaces are incompatible, not ready; a published compatible capability with `ready: false` has a stopped or otherwise unready Worker. Failed discovery leaves presence unknown and reports gateway unavailable.
+
+Readiness can be checked without inference:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8600/native/v1/capabilities
+```
+
+Use the configured gateway URL if overridden. This GET neither starts Workers nor establishes hardware qualification. See [local test notes](docs/LOCAL_TEST_NOTES.md) for the separate live rehearsal. Port 3100 and existing environment names remain unchanged.
